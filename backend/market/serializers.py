@@ -67,3 +67,20 @@ class IntegrityIssueSerializer(serializers.ModelSerializer):
             "resolved_at",
             "note",
         ]
+
+
+class AssetSummarySerializer(serializers.Serializer):
+    symbol = serializers.CharField()
+    name = serializers.CharField()
+    candle_count = serializers.IntegerField()
+    first_date = serializers.DateField(allow_null=True)
+    last_final_date = serializers.DateField(allow_null=True)
+    open_errors = serializers.IntegerField()
+    open_warnings = serializers.IntegerField()
+
+
+class IntegritySummarySerializer(serializers.Serializer):
+    """GET /api/integrity/summary/ 응답 형식."""
+
+    assets = AssetSummarySerializer(many=True)
+    last_run = CollectionRunSerializer(allow_null=True)
