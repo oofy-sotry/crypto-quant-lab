@@ -1,13 +1,18 @@
+import logging
 from collections.abc import Iterable
-from datetime import date
+from datetime import date, timedelta
 
 from django.db import connection
 from django.utils import timezone
 
-from market.models import Asset, DailyCandle
-from market.upbit import Candle
+from market.models import Asset, CollectionRun, DailyCandle
+from market.upbit import Candle, UpbitClient
+
+logger = logging.getLogger(__name__)
 
 UPDATE_FIELDS = ["open", "high", "low", "close", "volume", "value", "is_final", "collected_at"]
+# 정기 수집 때 다시 받는 최근 일수. 미완성 봉 확정과 업비트 쪽 정정 값을 반영하기 위함.
+RECENT_DAYS = 7
 
 
 def upsert_candles(asset: Asset, candles: Iterable[Candle], today: date | None = None) -> int:
@@ -48,3 +53,41 @@ def upsert_candles(asset: Asset, candles: Iterable[Candle], today: date | None =
         update_fields=UPDATE_FIELDS,
     )
     return len(rows)
+
+
+def collect_candles(
+    trigger: str, days: int | None = RECENT_DAYS, client: UpbitClient | None = None
+) -> CollectionRun:
+    """활성 종목의 일봉을 수집해 저장하고 실행 결과를 CollectionRun에 남긴다.
+
+    days=None이면 상장일부터 전체 기간을 가져오고(백필) Asset.listed_on도 채운다.
+    한 종목이 실패해도 나머지는 계속 수집하고 상태를 partial로 기록한다.
+    """
+    client = client or UpbitClient()
+    today = timezone.localdate()
+    since = None if days is None else today - timedelta(days=days - 1)
+    assets = list(Asset.objects.filter(is_active=True))
+    run = CollectionRun.objects.create(trigger=trigger, assets_count=len(assets))
+
+    errors = []
+    for asset in assets:
+        try:
+            candles = list(client.iter_daily_candles(asset.symbol, since=since))
+            run.upserted_count += upsert_candles(asset, candles, today=today)
+            if days is None and candles:
+                asset.listed_on = min(c.date for c in candles)
+                asset.save(update_fields=["listed_on"])
+        except Exception as exc:  # 한 종목 실패가 전체 수집을 멈추지 않게 한다
+            logger.exception("%s 수집 실패", asset.symbol)
+            errors.append(f"{asset.symbol}: {exc.__class__.__name__}: {exc}")
+
+    if not errors:
+        run.status = CollectionRun.Status.SUCCESS
+    elif len(errors) < len(assets):
+        run.status = CollectionRun.Status.PARTIAL
+    else:
+        run.status = CollectionRun.Status.FAILED
+    run.error_message = "\n".join(errors)
+    run.finished_at = timezone.now()
+    run.save()
+    return run
