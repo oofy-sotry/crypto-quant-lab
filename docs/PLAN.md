@@ -47,7 +47,7 @@ Claude Code로 코드를 작성하면 구현 자체는 며칠이면 끝난다. �
 | 백엔드 | Django + DRF | Vercel 프로젝트 ① (Root: `backend`) |
 | 프론트 | Next.js | Vercel 프로젝트 ② (Root: `frontend`) |
 | DB | MySQL 컨테이너 | Aiven MySQL (싱가포르, 무료 플랜, SSL) |
-| 캐시 | Redis 컨테이너 | Upstash Redis |
+| 캐시 | Redis 컨테이너 | Upstash Redis (싱가포르 primary) |
 | 정기 수집 | Celery beat | Vercel Cron → `/api/cron/collect` |
 | 비동기 작업 | Celery worker | 동기 실행(`BACKTEST_EXECUTOR=sync`) |
 | 모니터링 | 로그 | Sentry |
@@ -139,6 +139,7 @@ BacktestRun    params(JSON), params_hash, data_version, status, metrics(JSON),
 - 서버리스 환경의 커넥션 누수를 막기 위해 `CONN_MAX_AGE=0`
 - 정적 파일은 Vercel이 빌드 때 collectstatic 후 CDN으로 서빙(WhiteNoise는 로컬용)
 - 번들 크기·함수 실행 시간 제한은 D1에 확인
+- 함수·DB·캐시는 같은 리전(싱가포르)에 둔다. 함수 리전은 `backend/vercel.json`의 `regions`로 고정
 - Cron `30 0 * * *`(UTC, KST 09:30). production 배포에서만 실행된다.
 - 백필은 Cron이 아니라 로컬 `manage.py collect --all`로 운영 DB에 직접 실행한다. 정기 수집은 `collect`(최근 7일)와 같은 함수를 쓴다.
 
@@ -162,7 +163,8 @@ BacktestRun    params(JSON), params_hash, data_version, status, metrics(JSON),
 |---|---|---|
 | D1 | ✅ 완료 | Vercel 배포, 공개 URL의 `/api/health/`에서 DB·Redis 정상 확인 |
 | D2 | ✅ 완료 | 5종목 13,740행 백필(로컬·운영), 재수집 시 중복 0건, 테스트 37개. ETH·XRP 2017-10-21~23 결측은 업비트 원본에도 없음을 확인하고 해결 처리 |
-| D3 | ⏳ 다음 | 백테스트 엔진·API |
+| D3 | ✅ 완료 | 백테스트 엔진(신호 하루 지연·수수료·지표), 조회·백테스트 API, Redis 캐시(파라미터 해시+데이터 버전), throttle, Swagger(`/api/docs/`), 테스트 79개. 운영: 함수·Redis를 DB와 같은 싱가포르로 옮겨 응답 4.2초 → 0.46초 |
+| D4 | ⏳ 다음 | Cron 수집, Sentry, README |
 
 ## 9. 면접 포인트
 
