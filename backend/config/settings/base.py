@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
     "market",
     "backtest",
 ]
@@ -82,3 +83,24 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+REST_FRAMEWORK = {
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 100,
+    # 요청 횟수 제한은 캐시(Redis)에 기록된다. 서버리스 인스턴스가 여러 개여도 같은 카운터를 쓴다.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "120/min",
+        "backtest": "20/min",  # 계산이 무거운 백테스트 실행은 더 엄격하게
+    },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "crypto-quant-lab API",
+    "DESCRIPTION": "업비트 코인 일봉 수집·무결성 검사·백테스트 API",
+    "VERSION": "0.1.0",
+}
