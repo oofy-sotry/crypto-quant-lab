@@ -78,3 +78,16 @@ def find_spikes(candles: Iterable, threshold: Decimal = SPIKE_THRESHOLD) -> list
                 findings.append(Finding(c.date, Type.SPIKE, Severity.WARNING, detail))
         prev = c
     return findings
+
+
+def find_stale(latest_final: date | None, today: date, max_lag_days: int = 2) -> list[Finding]:
+    """마지막 확정 일봉이 너무 오래됐으면 수집이 멈춘 것으로 본다.
+
+    정상이라면 마지막 확정 봉은 어제(today - 1)다. 그보다 max_lag_days 이상 밀리면 오류.
+    """
+    if latest_final is None:
+        return []
+    lag = (today - latest_final).days
+    if lag < max_lag_days:
+        return []
+    return [Finding(latest_final, Type.STALE, Severity.ERROR, {"lag_days": lag})]
