@@ -7,6 +7,7 @@ DB 저장은 run_integrity_checks가 맡는다. 그래서 검사 규칙을 DB �
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from decimal import Decimal
 
 from market.models import IntegrityIssue
 
@@ -56,4 +57,24 @@ def check_candle_values(candles: Iterable) -> list[Finding]:
         if c.volume == 0:
             # 거래가 실제로 없었을 수도 있어서 경고로만 남긴다.
             findings.append(Finding(c.date, Type.ZERO_VOLUME, Severity.WARNING))
+    return findings
+
+
+SPIKE_THRESHOLD = Decimal("0.3")  # 전일 종가 대비 ±30%
+
+
+def find_spikes(candles: Iterable, threshold: Decimal = SPIKE_THRESHOLD) -> list[Finding]:
+    """전일 종가 대비 등락률이 threshold를 넘는 날을 찾는다.
+
+    candles는 날짜 오름차순이어야 한다. 실제로 일어날 수 있는 일이라 경고로 남긴다.
+    """
+    findings = []
+    prev = None
+    for c in candles:
+        if prev is not None and prev.close > 0:
+            change = c.close / prev.close - 1
+            if abs(change) > threshold:
+                detail = {"prev_date": prev.date.isoformat(), "change": f"{change:.4f}"}
+                findings.append(Finding(c.date, Type.SPIKE, Severity.WARNING, detail))
+        prev = c
     return findings
