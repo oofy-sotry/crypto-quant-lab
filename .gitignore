@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+staticfiles/
+
+# Node
+node_modules/
+.next/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel
+
+# Editor / OS
+*.swp
+*.swo
+.idea/
+.vscode/
+.DS_Store
