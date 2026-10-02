@@ -36,3 +36,24 @@ def find_missing_dates(dates: Iterable[date], start: date, end: date) -> list[Fi
             findings.append(Finding(day, Type.MISSING, Severity.ERROR))
         day += timedelta(days=1)
     return findings
+
+
+def check_candle_values(candles: Iterable) -> list[Finding]:
+    """일봉 한 개 안에서 지켜져야 할 규칙을 검사한다.
+
+    candles의 각 항목은 date, open, high, low, close, volume 속성을 가지면 된다
+    (DailyCandle 모델과 upbit.Candle 둘 다 해당).
+    """
+    findings = []
+    for c in candles:
+        prices = {"open": c.open, "high": c.high, "low": c.low, "close": c.close}
+        detail = {k: str(v) for k, v in prices.items()}  # JSON 저장용으로 문자열화
+        if any(p <= 0 for p in prices.values()):
+            findings.append(Finding(c.date, Type.NON_POSITIVE, Severity.ERROR, detail))
+        # 저가는 시가·종가보다 높을 수 없고, 고가는 시가·종가보다 낮을 수 없다.
+        if not (c.low <= min(c.open, c.close) and max(c.open, c.close) <= c.high):
+            findings.append(Finding(c.date, Type.OHLC_INVALID, Severity.ERROR, detail))
+        if c.volume == 0:
+            # 거래가 실제로 없었을 수도 있어서 경고로만 남긴다.
+            findings.append(Finding(c.date, Type.ZERO_VOLUME, Severity.WARNING))
+    return findings
