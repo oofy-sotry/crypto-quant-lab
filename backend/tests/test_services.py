@@ -3,8 +3,8 @@ from decimal import Decimal
 
 import pytest
 
-from market.models import Asset, DailyCandle
-from market.services import upsert_candles
+from market.models import Asset, CollectionRun, DailyCandle
+from market.services import collect_candles, upsert_candles
 from market.upbit import Candle
 
 TODAY = date(2026, 10, 2)
@@ -51,3 +51,66 @@ def test_upsert_is_idempotent_and_overwrites_values(btc):
 @pytest.mark.django_db
 def test_upsert_with_no_candles_does_nothing(btc):
     assert upsert_candles(btc, [], today=TODAY) == 0
+
+
+class FakeClient:
+    """종목별로 정해 둔 일봉을 돌려주는 가짜 업비트 클라이언트."""
+
+    def __init__(self, candles_by_symbol, fail=()):
+        self.candles_by_symbol = candles_by_symbol
+        self.fail = set(fail)
+        self.calls = []
+
+    def iter_daily_candles(self, symbol, since=None):
+        self.calls.append((symbol, since))
+        if symbol in self.fail:
+            raise ConnectionError("boom")
+        return iter(self.candles_by_symbol.get(symbol, []))
+
+
+@pytest.mark.django_db
+def test_collect_recent_days_records_success_run(btc):
+    Asset.objects.exclude(symbol="KRW-BTC").update(is_active=False)
+    client = FakeClient({"KRW-BTC": [candle(date(2026, 10, 1)), candle(date(2026, 9, 30))]})
+
+    run = collect_candles(CollectionRun.Trigger.CRON, days=7, client=client)
+
+    assert run.status == CollectionRun.Status.SUCCESS
+    assert run.assets_count == 1
+    assert run.upserted_count == 2
+    assert run.finished_at is not None
+    symbol, since = client.calls[0]
+    assert symbol == "KRW-BTC"
+    assert since is not None  # 최근 7일만 요청
+
+
+@pytest.mark.django_db
+def test_collect_backfill_sets_listed_on(btc):
+    Asset.objects.exclude(symbol="KRW-BTC").update(is_active=False)
+    client = FakeClient({"KRW-BTC": [candle(date(2026, 10, 1)), candle(date(2017, 9, 25))]})
+
+    collect_candles(CollectionRun.Trigger.BACKFILL, days=None, client=client)
+
+    btc.refresh_from_db()
+    assert btc.listed_on == date(2017, 9, 25)
+    assert client.calls[0] == ("KRW-BTC", None)  # 전체 기간 요청
+
+
+@pytest.mark.django_db
+def test_collect_continues_after_one_asset_fails():
+    client = FakeClient({"KRW-ETH": [candle(date(2026, 10, 1))]}, fail={"KRW-BTC"})
+
+    run = collect_candles(CollectionRun.Trigger.MANUAL, days=7, client=client)
+
+    assert run.status == CollectionRun.Status.PARTIAL
+    assert "KRW-BTC: ConnectionError" in run.error_message
+    assert DailyCandle.objects.filter(asset__symbol="KRW-ETH").count() == 1
+
+
+@pytest.mark.django_db
+def test_collect_marks_failed_when_all_assets_fail():
+    client = FakeClient({}, fail={a.symbol for a in Asset.objects.all()})
+
+    run = collect_candles(CollectionRun.Trigger.MANUAL, days=7, client=client)
+
+    assert run.status == CollectionRun.Status.FAILED
