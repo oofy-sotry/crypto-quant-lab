@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 from backtest.data import DataNotReady
 from backtest.models import BacktestRun
-from backtest.serializers import BacktestRequestSerializer
+from backtest.serializers import BacktestRequestSerializer, BacktestResultSerializer
 from backtest.services import normalize_params, run_backtest, serialize_run
 
 
@@ -18,8 +18,8 @@ class BacktestCreateView(APIView):
     @extend_schema(
         request=BacktestRequestSerializer,
         responses={
-            201: OpenApiResponse(description="새로 계산함"),
-            200: OpenApiResponse(description="캐시 또는 DB에 있던 결과"),
+            201: OpenApiResponse(BacktestResultSerializer, description="새로 계산함"),
+            200: OpenApiResponse(BacktestResultSerializer, description="캐시 또는 DB에 있던 결과"),
             400: OpenApiResponse(description="요청 값 오류"),
             422: OpenApiResponse(description="기간 내 데이터 오류·부족으로 계산 불가"),
         },
@@ -39,5 +39,6 @@ class BacktestCreateView(APIView):
 class BacktestDetailView(APIView):
     """저장된 백테스트 결과 조회."""
 
+    @extend_schema(responses=BacktestResultSerializer)
     def get(self, request, pk):
         return Response(serialize_run(get_object_or_404(BacktestRun, pk=pk)))
