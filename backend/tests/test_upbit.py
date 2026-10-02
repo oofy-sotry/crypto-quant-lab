@@ -130,3 +130,51 @@ def test_throttle_keeps_min_interval_between_requests():
     client.fetch_daily_candles("KRW-BTC")
 
     assert waits == [0.1]
+
+
+def raw_candles(last: date, count: int) -> str:
+    """last부터 하루씩 과거로 count개의 업비트 일봉 응답 JSON을 만든다."""
+    from datetime import timedelta
+
+    rows = []
+    for i in range(count):
+        day = last - timedelta(days=i)
+        rows.append(
+            {
+                "candle_date_time_kst": f"{day.isoformat()}T09:00:00",
+                "opening_price": 100.0,
+                "high_price": 110.0,
+                "low_price": 90.0,
+                "trade_price": 105.0,
+                "candle_acc_trade_price": 1000.0,
+                "candle_acc_trade_volume": 10.0,
+            }
+        )
+    return json.dumps(rows)
+
+
+@responses.activate
+def test_iter_daily_candles_paginates_until_listing_date():
+    responses.get(CANDLES_URL, body=raw_candles(date(2026, 10, 1), 200))
+    responses.get(CANDLES_URL, body=raw_candles(date(2026, 3, 15), 3))
+
+    candles = list(UpbitClient(min_interval=0).iter_daily_candles("KRW-BTC"))
+
+    assert len(candles) == 203
+    assert candles[0].date == date(2026, 10, 1)
+    assert candles[-1].date == date(2026, 3, 13)
+    # 두 번째 페이지는 첫 페이지의 가장 오래된 날짜(3/16) 이전을 요청한다.
+    assert "to=2026-03-16T00%3A00%3A00Z" in responses.calls[1].request.url
+
+
+@responses.activate
+def test_iter_daily_candles_stops_at_since():
+    responses.get(CANDLES_URL, body=raw_candles(date(2026, 10, 1), 200))
+
+    candles = list(
+        UpbitClient(min_interval=0).iter_daily_candles("KRW-BTC", since=date(2026, 9, 25))
+    )
+
+    assert [c.date for c in candles][-1] == date(2026, 9, 25)
+    assert len(candles) == 7
+    assert len(responses.calls) == 1
