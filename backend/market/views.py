@@ -13,6 +13,7 @@ from market.serializers import (
     CandleSerializer,
     CollectionRunSerializer,
     IntegrityIssueSerializer,
+    IntegritySummarySerializer,
 )
 
 
@@ -95,6 +96,7 @@ class IntegrityIssueListView(generics.ListAPIView):
 class IntegritySummaryView(APIView):
     """종목별 데이터 상태 요약 + 마지막 수집 실행."""
 
+    @extend_schema(responses=IntegritySummarySerializer)
     def get(self, request):
         open_issue = Q(issues__resolved_at__isnull=True)
         # 한 쿼리에 이슈 수를 세고, 일봉 범위는 별도 집계로 가져온다
