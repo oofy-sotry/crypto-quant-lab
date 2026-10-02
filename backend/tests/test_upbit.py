@@ -99,3 +99,34 @@ def test_does_not_retry_client_errors():
         UpbitClient(sleep=lambda _: None).fetch_daily_candles("KRW-NOPE")
 
     assert len(responses.calls) == 1
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+@responses.activate
+def test_throttle_keeps_min_interval_between_requests():
+    responses.get(CANDLES_URL, body="[]")
+    clock = FakeClock()
+    waits = []
+
+    def sleep(seconds):
+        waits.append(round(seconds, 2))
+        clock.sleep(seconds)
+
+    client = UpbitClient(min_interval=0.15, sleep=sleep, clock=clock)
+    client.fetch_daily_candles("KRW-BTC")  # 첫 요청은 기다리지 않음
+    clock.now += 0.05  # 0.05초 뒤 두 번째 요청
+    client.fetch_daily_candles("KRW-BTC")
+    clock.now += 1.0  # 충분히 지난 뒤 세 번째 요청
+    client.fetch_daily_candles("KRW-BTC")
+
+    assert waits == [0.1]
