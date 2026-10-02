@@ -35,7 +35,7 @@ class DailyCandle(models.Model):
     collected_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["asset", "date"]
+        ordering = ["asset_id", "date"]  # asset으로 정렬하면 Asset 테이블 JOIN이 붙는다
         constraints = [
             models.UniqueConstraint(fields=["asset", "date"], name="uniq_candle_asset_date"),
         ]
@@ -100,7 +100,7 @@ class IntegrityIssue(models.Model):
     note = models.CharField(max_length=200, blank=True)
 
     class Meta:
-        ordering = ["-date", "asset"]
+        ordering = ["-date", "asset_id"]
         constraints = [
             # 검사를 여러 번 돌려도 같은 이슈가 중복으로 쌓이지 않게 한다.
             models.UniqueConstraint(fields=["asset", "date", "type"], name="uniq_issue"),
