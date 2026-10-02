@@ -52,3 +52,48 @@ def test_fetch_daily_candles_raises_on_unknown_market():
 
     with pytest.raises(requests.HTTPError):
         UpbitClient().fetch_daily_candles("KRW-NOPE")
+
+
+@responses.activate
+def test_retries_with_exponential_backoff_on_429():
+    responses.get(CANDLES_URL, status=429)
+    responses.get(CANDLES_URL, status=429)
+    responses.get(CANDLES_URL, body=f"[{RAW}]")
+    waits = []
+
+    candles = UpbitClient(sleep=waits.append).fetch_daily_candles("KRW-BTC")
+
+    assert len(candles) == 1
+    assert waits == [0.5, 1.0]
+
+
+@responses.activate
+def test_gives_up_after_max_retries():
+    responses.get(CANDLES_URL, status=503)
+    waits = []
+
+    with pytest.raises(requests.HTTPError):
+        UpbitClient(max_retries=2, sleep=waits.append).fetch_daily_candles("KRW-BTC")
+
+    assert len(responses.calls) == 3  # 첫 시도 + 재시도 2번
+    assert waits == [0.5, 1.0]
+
+
+@responses.activate
+def test_retries_on_connection_error():
+    responses.get(CANDLES_URL, body=requests.ConnectionError("reset"))
+    responses.get(CANDLES_URL, body=f"[{RAW}]")
+
+    candles = UpbitClient(sleep=lambda _: None).fetch_daily_candles("KRW-BTC")
+
+    assert len(candles) == 1
+
+
+@responses.activate
+def test_does_not_retry_client_errors():
+    responses.get(CANDLES_URL, status=404)
+
+    with pytest.raises(requests.HTTPError):
+        UpbitClient(sleep=lambda _: None).fetch_daily_candles("KRW-NOPE")
+
+    assert len(responses.calls) == 1
