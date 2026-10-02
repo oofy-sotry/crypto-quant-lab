@@ -114,3 +114,20 @@ class UpbitClient:
         # float로 읽으면 오차가 생길 수 있어 처음부터 Decimal로 파싱한다.
         rows = json.loads(response.text, parse_float=Decimal)
         return [parse_candle(row) for row in rows]
+
+    def iter_daily_candles(self, market: str, since: date | None = None):
+        """최신 일봉부터 과거로 거슬러 올라가며 하나씩 돌려준다.
+
+        200개씩 페이지를 넘기고, 응답이 200개보다 적으면(상장일에 도달) 멈춘다.
+        since를 주면 그 날짜까지만 가져온다(since 포함).
+        """
+        to = None
+        while True:
+            page = self.fetch_daily_candles(market, MAX_COUNT, to)
+            for candle in page:
+                if since is not None and candle.date < since:
+                    return
+                yield candle
+            if len(page) < MAX_COUNT:
+                return
+            to = page[-1].date  # 가장 오래된 날짜 이전부터 다음 페이지 (to는 해당 날짜 제외)
