@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from market.integrity import run_integrity_checks
 from market.models import Asset, CollectionRun, DailyCandle
-from market.upbit import Candle, UpbitClient
+from market.upbit import Candle, UpbitClient, current_trading_day
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +20,9 @@ def upsert_candles(asset: Asset, candles: Iterable[Candle], today: date | None =
     """일봉을 저장한다. 같은 (asset, date)가 있으면 덮어쓰고 없으면 새로 넣는다.
 
     unique(asset, date) 제약을 이용한 upsert라서 여러 번 실행해도 행이 중복되지 않는다(멱등).
-    today(KST) 이전 날짜만 마감된 봉(is_final=True)으로 표시한다.
+    today(진행 중인 일봉 날짜) 이전 날짜만 마감된 봉(is_final=True)으로 표시한다.
     """
-    today = today or timezone.localdate()  # settings.TIME_ZONE = Asia/Seoul
+    today = today or current_trading_day()
     rows = [
         DailyCandle(
             asset=asset,
@@ -65,7 +65,7 @@ def collect_candles(
     한 종목이 실패해도 나머지는 계속 수집하고 상태를 partial로 기록한다.
     """
     client = client or UpbitClient()
-    today = timezone.localdate()
+    today = current_trading_day()
     since = None if days is None else today - timedelta(days=days - 1)
     assets = list(Asset.objects.filter(is_active=True))
     run = CollectionRun.objects.create(trigger=trigger, assets_count=len(assets))

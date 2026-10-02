@@ -126,7 +126,7 @@ def test_collect_runs_integrity_checks_and_links_issues_to_run(btc):
     days = [date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 1)]
     client = FakeClient({"KRW-BTC": [candle(day) for day in days]})
 
-    with patch("market.services.timezone.localdate", return_value=TODAY):
+    with patch("market.services.current_trading_day", return_value=TODAY):
         run = collect_candles(CollectionRun.Trigger.CRON, days=7, client=client)
 
     issue = IntegrityIssue.objects.get(type=IntegrityIssue.Type.MISSING)
