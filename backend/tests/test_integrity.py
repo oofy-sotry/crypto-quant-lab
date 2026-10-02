@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
-from market.integrity import check_candle_values, find_missing_dates
+from market.integrity import check_candle_values, find_missing_dates, find_spikes
 from market.models import IntegrityIssue
 
 
@@ -61,3 +61,20 @@ def test_check_candle_values_detects_non_positive_price_and_zero_volume():
     assert (2, "zero_volume") in types_of(findings)
     zero_volume = next(f for f in findings if f.type == "zero_volume")
     assert zero_volume.severity == IntegrityIssue.Severity.WARNING
+
+
+def test_find_spikes_flags_moves_over_threshold_as_warning():
+    closes = ["100", "125", "90", "200"]  # +25%, -28%, +122%
+    candles = [bar(i + 1, c, c, c, c) for i, c in enumerate(closes)]
+
+    findings = find_spikes(candles, threshold=Decimal("0.3"))
+
+    assert [f.date for f in findings] == [d(4)]
+    assert findings[0].severity == IntegrityIssue.Severity.WARNING
+    assert findings[0].detail == {"prev_date": "2026-10-03", "change": "1.2222"}
+
+
+def test_find_spikes_uses_absolute_change():
+    candles = [bar(1, "100", "100", "100", "100"), bar(2, "60", "60", "60", "60")]  # -40%
+
+    assert [f.date for f in find_spikes(candles)] == [d(2)]
