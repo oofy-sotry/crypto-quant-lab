@@ -1,9 +1,10 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 
-from market.models import Asset, CollectionRun, DailyCandle
+from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue
 from market.services import collect_candles, upsert_candles
 from market.upbit import Candle
 
@@ -114,3 +115,20 @@ def test_collect_marks_failed_when_all_assets_fail():
     run = collect_candles(CollectionRun.Trigger.MANUAL, days=7, client=client)
 
     assert run.status == CollectionRun.Status.FAILED
+
+
+@pytest.mark.django_db
+def test_collect_runs_integrity_checks_and_links_issues_to_run(btc):
+    Asset.objects.exclude(symbol="KRW-BTC").update(is_active=False)
+    btc.listed_on = date(2026, 9, 28)
+    btc.save()
+    # 9/29가 빠진 데이터
+    days = [date(2026, 9, 28), date(2026, 9, 30), date(2026, 10, 1)]
+    client = FakeClient({"KRW-BTC": [candle(day) for day in days]})
+
+    with patch("market.services.timezone.localdate", return_value=TODAY):
+        run = collect_candles(CollectionRun.Trigger.CRON, days=7, client=client)
+
+    issue = IntegrityIssue.objects.get(type=IntegrityIssue.Type.MISSING)
+    assert issue.date == date(2026, 9, 29)
+    assert issue.detected_run == run
