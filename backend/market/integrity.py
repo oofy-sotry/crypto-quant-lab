@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.utils import timezone
+
 from market.models import IntegrityIssue
 
 Type = IntegrityIssue.Type
@@ -91,3 +93,59 @@ def find_stale(latest_final: date | None, today: date, max_lag_days: int = 2) ->
     if lag < max_lag_days:
         return []
     return [Finding(latest_final, Type.STALE, Severity.ERROR, {"lag_days": lag})]
+
+
+def run_integrity_checks(asset, today: date, run=None) -> dict:
+    """한 종목의 확정 일봉 전체를 검사하고 결과를 IntegrityIssue에 반영한다.
+
+    - 새로 발견: 생성
+    - 이미 있음: 내용 갱신, 자동 해결됐던 이슈면 다시 연다(사람이 note를 남긴 건 유지)
+    - 이번엔 발견 안 됨: 자동 해결 처리
+    같은 데이터로 여러 번 돌려도 결과가 같다(멱등).
+    """
+    candles = list(asset.candles.filter(is_final=True).order_by("date"))
+    if not candles:
+        return {"created": 0, "reopened": 0, "resolved": 0}
+
+    start = asset.listed_on or candles[0].date
+    findings = [
+        *find_missing_dates((c.date for c in candles), start=start, end=today - timedelta(days=1)),
+        *check_candle_values(candles),
+        *find_spikes(candles),
+        *find_stale(candles[-1].date, today),
+    ]
+
+    existing = {(i.date, i.type): i for i in asset.issues.all()}
+    found_keys = set()
+    summary = {"created": 0, "reopened": 0, "resolved": 0}
+    now = timezone.now()
+
+    for f in findings:
+        key = (f.date, f.type)
+        found_keys.add(key)
+        issue = existing.get(key)
+        if issue is None:
+            IntegrityIssue.objects.create(
+                asset=asset,
+                date=f.date,
+                type=f.type,
+                severity=f.severity,
+                detail=f.detail,
+                detected_run=run,
+            )
+            summary["created"] += 1
+            continue
+        issue.severity, issue.detail = f.severity, f.detail
+        if issue.resolved_at is not None and not issue.note:
+            issue.resolved_at = None
+            issue.detected_run = run
+            summary["reopened"] += 1
+        issue.save()
+
+    for key, issue in existing.items():
+        if key not in found_keys and issue.resolved_at is None:
+            issue.resolved_at = now
+            issue.save(update_fields=["resolved_at"])
+            summary["resolved"] += 1
+
+    return summary
