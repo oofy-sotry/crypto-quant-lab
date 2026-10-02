@@ -9,7 +9,10 @@ def test_health_ok(client):
     response = client.get(reverse("health"))
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "checks": {"database": "ok", "cache": "ok"}}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["checks"] == {"database": "ok", "cache": "ok"}
+    assert set(body["latency_ms"]) == {"database", "cache"}
 
 
 @pytest.mark.django_db
