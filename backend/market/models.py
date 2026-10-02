@@ -42,3 +42,31 @@ class DailyCandle(models.Model):
 
     def __str__(self):
         return f"{self.asset} {self.date}"
+
+
+class CollectionRun(models.Model):
+    class Trigger(models.TextChoices):
+        CRON = "cron", "Vercel Cron"
+        BEAT = "beat", "Celery beat"
+        MANUAL = "manual", "수동 실행"
+        BACKFILL = "backfill", "과거 데이터 백필"
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "실행 중"
+        SUCCESS = "success", "성공"
+        PARTIAL = "partial", "일부 실패"
+        FAILED = "failed", "실패"
+
+    trigger = models.CharField(max_length=10, choices=Trigger.choices)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    assets_count = models.PositiveIntegerField(default=0)
+    upserted_count = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"{self.trigger} {self.started_at:%Y-%m-%d %H:%M} {self.status}"
