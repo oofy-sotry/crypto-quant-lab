@@ -20,6 +20,9 @@ node_modules/
 # Vercel
 .vercel
 
+# 개인 학습용 문서 (면접 준비 노트)
+docs/private/
+
 # AI 에이전트 스킬 (Vercel CLI가 설치)
 .agents/
 .claude/
