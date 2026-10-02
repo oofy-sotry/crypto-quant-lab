@@ -4,14 +4,20 @@
 """
 
 import json
+import logging
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
 import requests
 
+logger = logging.getLogger(__name__)
+
 BASE_URL = "https://api.upbit.com/v1"
 MAX_COUNT = 200  # 업비트가 한 번에 돌려주는 최대 캔들 수
+# 재시도할 응답 코드: 요청 수 제한(429)과 일시적인 서버 오류(5xx)
+RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -42,9 +48,40 @@ def parse_candle(raw: dict) -> Candle:
 
 
 class UpbitClient:
-    def __init__(self, session: requests.Session | None = None, timeout: float = 10):
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        timeout: float = 10,
+        max_retries: int = 5,
+        backoff_base: float = 0.5,
+        sleep=time.sleep,  # 테스트에서 실제로 기다리지 않도록 주입할 수 있게 둔다
+    ):
         self.session = session or requests.Session()
         self.timeout = timeout
+        self.max_retries = max_retries
+        self.backoff_base = backoff_base
+        self.sleep = sleep
+
+    def _get(self, path: str, params: dict) -> requests.Response:
+        """GET 요청. 429·5xx·네트워크 오류는 지수 백오프(0.5→1→2→4초…)로 재시도한다."""
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.session.get(
+                    f"{BASE_URL}{path}", params=params, timeout=self.timeout
+                )
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                if attempt == self.max_retries:
+                    raise
+                logger.warning(
+                    "업비트 요청 실패(%s), 재시도 %d", exc.__class__.__name__, attempt + 1
+                )
+            else:
+                if response.status_code not in RETRYABLE_STATUS or attempt == self.max_retries:
+                    response.raise_for_status()
+                    return response
+                logger.warning("업비트 응답 %d, 재시도 %d", response.status_code, attempt + 1)
+            self.sleep(self.backoff_base * 2**attempt)
+        raise AssertionError("unreachable")
 
     def fetch_daily_candles(
         self, market: str, count: int = MAX_COUNT, to: date | None = None
@@ -58,8 +95,7 @@ class UpbitClient:
         if to is not None:
             params["to"] = f"{to.isoformat()}T00:00:00Z"
 
-        response = self.session.get(f"{BASE_URL}/candles/days", params=params, timeout=self.timeout)
-        response.raise_for_status()
+        response = self._get("/candles/days", params)
         # float로 읽으면 오차가 생길 수 있어 처음부터 Decimal로 파싱한다.
         rows = json.loads(response.text, parse_float=Decimal)
         return [parse_candle(row) for row in rows]
