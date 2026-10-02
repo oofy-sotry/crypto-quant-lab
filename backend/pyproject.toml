@@ -5,3 +5,7 @@ extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "DJ"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.local"
+testpaths = ["tests"]
