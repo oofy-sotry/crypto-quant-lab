@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from django.db import connection
 from django.utils import timezone
 
+from market.integrity import run_integrity_checks
 from market.models import Asset, CollectionRun, DailyCandle
 from market.upbit import Candle, UpbitClient
 
@@ -58,7 +59,7 @@ def upsert_candles(asset: Asset, candles: Iterable[Candle], today: date | None =
 def collect_candles(
     trigger: str, days: int | None = RECENT_DAYS, client: UpbitClient | None = None
 ) -> CollectionRun:
-    """활성 종목의 일봉을 수집해 저장하고 실행 결과를 CollectionRun에 남긴다.
+    """활성 종목의 일봉을 수집해 저장하고, 무결성 검사를 돌린 뒤 결과를 CollectionRun에 남긴다.
 
     days=None이면 상장일부터 전체 기간을 가져오고(백필) Asset.listed_on도 채운다.
     한 종목이 실패해도 나머지는 계속 수집하고 상태를 partial로 기록한다.
@@ -77,6 +78,7 @@ def collect_candles(
             if days is None and candles:
                 asset.listed_on = min(c.date for c in candles)
                 asset.save(update_fields=["listed_on"])
+            run_integrity_checks(asset, today=today, run=run)
         except Exception as exc:  # 한 종목 실패가 전체 수집을 멈추지 않게 한다
             logger.exception("%s 수집 실패", asset.symbol)
             errors.append(f"{asset.symbol}: {exc.__class__.__name__}: {exc}")
