@@ -61,7 +61,7 @@ def test_retries_with_exponential_backoff_on_429():
     responses.get(CANDLES_URL, body=f"[{RAW}]")
     waits = []
 
-    candles = UpbitClient(sleep=waits.append).fetch_daily_candles("KRW-BTC")
+    candles = UpbitClient(min_interval=0, sleep=waits.append).fetch_daily_candles("KRW-BTC")
 
     assert len(candles) == 1
     assert waits == [0.5, 1.0]
@@ -73,7 +73,9 @@ def test_gives_up_after_max_retries():
     waits = []
 
     with pytest.raises(requests.HTTPError):
-        UpbitClient(max_retries=2, sleep=waits.append).fetch_daily_candles("KRW-BTC")
+        UpbitClient(max_retries=2, min_interval=0, sleep=waits.append).fetch_daily_candles(
+            "KRW-BTC"
+        )
 
     assert len(responses.calls) == 3  # 첫 시도 + 재시도 2번
     assert waits == [0.5, 1.0]

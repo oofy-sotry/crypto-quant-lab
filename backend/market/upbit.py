@@ -54,17 +54,32 @@ class UpbitClient:
         timeout: float = 10,
         max_retries: int = 5,
         backoff_base: float = 0.5,
-        sleep=time.sleep,  # 테스트에서 실제로 기다리지 않도록 주입할 수 있게 둔다
+        min_interval: float = 0.15,
+        # 테스트에서 실제로 기다리지 않도록 시계와 sleep을 주입할 수 있게 둔다
+        sleep=time.sleep,
+        clock=time.monotonic,
     ):
         self.session = session or requests.Session()
         self.timeout = timeout
         self.max_retries = max_retries
         self.backoff_base = backoff_base
+        self.min_interval = min_interval
         self.sleep = sleep
+        self.clock = clock
+        self._last_request_at: float | None = None
+
+    def _throttle(self):
+        """직전 요청과 min_interval 이상 간격을 둔다 (업비트 시세 API는 초당 10회 제한)."""
+        if self._last_request_at is not None:
+            wait = self.min_interval - (self.clock() - self._last_request_at)
+            if wait > 0:
+                self.sleep(wait)
+        self._last_request_at = self.clock()
 
     def _get(self, path: str, params: dict) -> requests.Response:
         """GET 요청. 429·5xx·네트워크 오류는 지수 백오프(0.5→1→2→4초…)로 재시도한다."""
         for attempt in range(self.max_retries + 1):
+            self._throttle()
             try:
                 response = self.session.get(
                     f"{BASE_URL}{path}", params=params, timeout=self.timeout
