@@ -95,6 +95,9 @@ class IntegrityIssue(models.Model):
     )
     detected_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    # 사람이 확인하고 해결 처리한 사유 (예: "업비트 원본에도 없는 날짜").
+    # note가 있으면 다음 검사에서 같은 이슈가 다시 발견돼도 해결 상태를 유지한다.
+    note = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["-date", "asset"]
