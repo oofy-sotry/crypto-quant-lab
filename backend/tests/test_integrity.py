@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
-from market.integrity import check_candle_values, find_missing_dates, find_spikes
+from market.integrity import check_candle_values, find_missing_dates, find_spikes, find_stale
 from market.models import IntegrityIssue
 
 
@@ -78,3 +78,14 @@ def test_find_spikes_uses_absolute_change():
     candles = [bar(1, "100", "100", "100", "100"), bar(2, "60", "60", "60", "60")]  # -40%
 
     assert [f.date for f in find_spikes(candles)] == [d(2)]
+
+
+def test_find_stale_ok_when_latest_final_is_yesterday():
+    assert find_stale(latest_final=d(1), today=d(2)) == []
+
+
+def test_find_stale_reports_lag_when_collection_stopped():
+    findings = find_stale(latest_final=d(1), today=d(4))
+
+    assert findings[0].type == IntegrityIssue.Type.STALE
+    assert findings[0].detail == {"lag_days": 3}
