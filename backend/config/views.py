@@ -1,6 +1,6 @@
 from django.core.cache import cache
 from django.db import connection
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 
 
@@ -16,6 +16,9 @@ def _check_cache():
 
 
 @api_view(["GET"])
+# 모니터링용이라 횟수 제한을 걸지 않는다. throttle은 Redis를 쓰므로,
+# 걸어 두면 Redis 장애 때 health가 503 대신 500으로 죽어 장애 원인을 알려주지 못한다.
+@throttle_classes([])
 def health(request):
     checks = {}
     for name, check in (("database", _check_database), ("cache", _check_cache)):
