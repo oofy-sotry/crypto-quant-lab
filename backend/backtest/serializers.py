@@ -30,3 +30,33 @@ class BacktestRequestSerializer(serializers.Serializer):
             if short >= long:
                 raise serializers.ValidationError("short는 long보다 작아야 합니다.")
         return attrs
+
+
+class MetricsSerializer(serializers.Serializer):
+    total_return = serializers.FloatField()
+    cagr = serializers.FloatField()
+    max_drawdown = serializers.FloatField()
+    sharpe = serializers.FloatField()
+    trades = serializers.IntegerField()
+    win_rate = serializers.FloatField()
+    exposure = serializers.FloatField()
+    days = serializers.IntegerField()
+
+
+class EquityPointSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    equity = serializers.FloatField()
+    benchmark = serializers.FloatField()
+    drawdown = serializers.FloatField()
+
+
+class BacktestResultSerializer(serializers.Serializer):
+    """응답 형식 문서화용 (실제 응답은 services.serialize_run이 만든다)."""
+
+    id = serializers.IntegerField()
+    params = serializers.DictField()
+    data_version = serializers.CharField()
+    metrics = MetricsSerializer()
+    benchmark = MetricsSerializer()
+    equity_curve = EquityPointSerializer(many=True)
+    created_at = serializers.DateTimeField()
