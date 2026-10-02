@@ -70,3 +70,38 @@ class CollectionRun(models.Model):
 
     def __str__(self):
         return f"{self.trigger} {self.started_at:%Y-%m-%d %H:%M} {self.status}"
+
+
+class IntegrityIssue(models.Model):
+    class Type(models.TextChoices):
+        MISSING = "missing", "결측일"
+        OHLC_INVALID = "ohlc_invalid", "OHLC 규칙 위반"
+        NON_POSITIVE = "non_positive", "0 이하 가격"
+        ZERO_VOLUME = "zero_volume", "거래량 0"
+        SPIKE = "spike", "급등락"
+        STALE = "stale", "수집 지연"
+
+    class Severity(models.TextChoices):
+        ERROR = "error", "오류"
+        WARNING = "warning", "경고"
+
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="issues")
+    date = models.DateField()
+    type = models.CharField(max_length=20, choices=Type.choices)
+    severity = models.CharField(max_length=10, choices=Severity.choices)
+    detail = models.JSONField(default=dict)
+    detected_run = models.ForeignKey(
+        CollectionRun, on_delete=models.SET_NULL, null=True, blank=True, related_name="issues"
+    )
+    detected_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-date", "asset"]
+        constraints = [
+            # 검사를 여러 번 돌려도 같은 이슈가 중복으로 쌓이지 않게 한다.
+            models.UniqueConstraint(fields=["asset", "date", "type"], name="uniq_issue"),
+        ]
+
+    def __str__(self):
+        return f"{self.asset} {self.date} {self.type}"
