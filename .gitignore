@@ -20,6 +20,11 @@ node_modules/
 # Vercel
 .vercel
 
+# AI 에이전트 스킬 (Vercel CLI가 설치)
+.agents/
+.claude/
+skills-lock.json
+
 # Editor / OS
 *.swp
 *.swo
