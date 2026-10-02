@@ -1,12 +1,13 @@
 import json
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 import requests
 import responses
 
-from market.upbit import BASE_URL, UpbitClient, parse_candle
+from market.upbit import BASE_URL, UpbitClient, current_trading_day, parse_candle
 
 CANDLES_URL = f"{BASE_URL}/candles/days"
 
@@ -178,3 +179,11 @@ def test_iter_daily_candles_stops_at_since():
     assert [c.date for c in candles][-1] == date(2026, 9, 25)
     assert len(candles) == 7
     assert len(responses.calls) == 1
+
+
+def test_current_trading_day_switches_at_kst_9am():
+    kst = ZoneInfo("Asia/Seoul")
+    # KST 10/3 08:59 → 아직 10/2 일봉이 진행 중
+    assert current_trading_day(datetime(2026, 10, 3, 8, 59, tzinfo=kst)) == date(2026, 10, 2)
+    # KST 10/3 09:00 → 10/3 일봉 시작
+    assert current_trading_day(datetime(2026, 10, 3, 9, 0, tzinfo=kst)) == date(2026, 10, 3)
