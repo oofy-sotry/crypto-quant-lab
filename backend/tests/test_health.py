@@ -19,3 +19,13 @@ def test_health_returns_503_when_cache_fails(client):
 
     assert response.status_code == 503
     assert response.json()["checks"]["cache"] == "error: ConnectionError"
+
+
+@pytest.mark.django_db
+def test_openapi_schema_and_swagger_ui_are_served(client):
+    schema = client.get(reverse("schema"))
+    docs = client.get(reverse("swagger-ui"))
+
+    assert schema.status_code == 200
+    assert b"/api/backtests/" in schema.content
+    assert docs.status_code == 200
