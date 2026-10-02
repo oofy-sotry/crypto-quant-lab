@@ -2,7 +2,13 @@ import json
 from datetime import date
 from decimal import Decimal
 
-from market.upbit import parse_candle
+import pytest
+import requests
+import responses
+
+from market.upbit import BASE_URL, UpbitClient, parse_candle
+
+CANDLES_URL = f"{BASE_URL}/candles/days"
 
 RAW = """{
     "market": "KRW-BTC",
@@ -25,3 +31,24 @@ def test_parse_candle_uses_kst_date_and_exact_decimals():
     # float로 읽었다면 끝자리가 달라질 수 있는 값이 그대로 보존된다.
     assert candle.value == Decimal("92081396132.22375")
     assert candle.volume == Decimal("804.24034244")
+
+
+@responses.activate
+def test_fetch_daily_candles_sends_params_and_parses_decimals():
+    responses.get(CANDLES_URL, body=f"[{RAW}]")
+
+    candles = UpbitClient().fetch_daily_candles("KRW-BTC", count=1, to=date(2026, 10, 2))
+
+    request = responses.calls[0].request
+    assert "market=KRW-BTC" in request.url
+    assert "count=1" in request.url
+    assert "to=2026-10-02T00%3A00%3A00Z" in request.url
+    assert candles[0].value == Decimal("92081396132.22375")
+
+
+@responses.activate
+def test_fetch_daily_candles_raises_on_unknown_market():
+    responses.get(CANDLES_URL, status=404, json={"error": {"message": "Code not found"}})
+
+    with pytest.raises(requests.HTTPError):
+        UpbitClient().fetch_daily_candles("KRW-NOPE")
