@@ -85,8 +85,8 @@ CollectionRun  trigger(cron/manual/beat/backfill), started_at, finished_at,
                status(running/success/partial/failed), upserted_count, error_message
 IntegrityIssue asset, date, type, severity(error/warning), detail(JSON),
                detected_run, resolved_at, note — unique(asset, date, type)
-BacktestRun    params(JSON), params_hash, data_version, status, metrics(JSON),
-               equity_curve(JSON), created_at
+BacktestRun    asset, params(JSON), params_hash, data_version, metrics(JSON),
+               benchmark(JSON), equity_curve(JSON), created_at — unique(params_hash, data_version)
 ```
 
 - upsert는 `bulk_create(update_conflicts=True)`로 처리한다. MySQL에서는 `ON DUPLICATE KEY UPDATE`로 변환된다.
@@ -109,28 +109,29 @@ BacktestRun    params(JSON), params_hash, data_version, status, metrics(JSON),
 
 ### 6.4 백테스트
 
-- 전략: `ma_cross(short, long)`, `buy_and_hold`. 모두 `prices → position` 인터페이스를 따른다.
+- 전략: `ma_cross(short, long)`, `buy_and_hold`. 모두 `종가 → signal(목표 비중 0/1)` 인터페이스를 따르고, 엔진이 하루 늦춰 position으로 적용한다.
 - 미래참조 방지: `position = signal.shift(1)`. (Could) `execution="next_open"` 옵션.
-- 워밍업: `start - long`일부터 데이터를 조회한다.
-- 비용: 수수료 0.05% 기본값, 슬리피지(bp)는 파라미터. 포지션이 바뀐 날에만 차감한다.
+- 워밍업: `start - long - 1`일부터 데이터를 조회한다(-1일은 시작일 수익률 계산용). 데이터가 모자라면 422.
+- 비용: `fee` 하나로 수수료(+슬리피지)를 표현한다. 기본 0.05%, 0~1% 범위. 포지션이 바뀐 날에만 차감하고, 시작일 직전은 현금으로 보아 진입 비용도 낸다.
 - 지표: 누적수익률, CAGR(365일), MDD, 샤프(365일, 무위험수익률 0), 거래 횟수, 승률, 노출 비율
-- 테스트: 손계산 비교, 상수 가격이면 수익률 0, 미래 데이터를 바꿔도 과거 포지션이 그대로인지 확인(look-ahead 회귀 테스트)
+- 같은 기간·같은 수수료의 Buy&Hold 지표를 항상 함께 돌려준다(벤치마크).
+- 테스트: 신호·시뮬레이션·지표 손계산 비교, 거래가 없으면 지표 0, 미래 데이터를 바꿔도 과거 포지션이 그대로인지 확인(look-ahead 회귀 테스트)
 
 ### 6.5 API
 
 | 메서드 | 경로 | 비고 |
 |---|---|---|
-| GET | `/api/health/` | DB·Redis 연결 확인 |
+| GET | `/api/health/` | DB·Redis 연결 확인 + 서비스별 소요 시간(`latency_ms`), throttle 제외 |
 | GET | `/api/assets/` | |
-| GET | `/api/candles/?symbol=&from=&to=` | 페이지네이션, 기간 상한 |
+| GET | `/api/candles/?symbol=&from=&to=` | 페이지당 500개(최대 5000, `page_size`) |
 | GET | `/api/integrity/summary/` | 종목별 이슈 수, 마지막 수집 시각 |
-| GET | `/api/integrity/issues/` | symbol, type, resolved 필터 |
+| GET | `/api/integrity/issues/` | symbol, type, severity, resolved 필터 |
 | GET | `/api/collection-runs/` | |
-| POST | `/api/backtests/` | 캐시 히트면 200, 새로 계산하면 201, throttle |
+| POST | `/api/backtests/` | 새로 계산 201 / 기존 결과 200 / 입력 오류 400 / 데이터 오류 422 / 분당 20회 초과 429 |
 | GET | `/api/backtests/{id}/` | |
 | POST | `/api/backtests/grid/` | (Could) 로컬에서는 Celery로 202 응답 |
 | GET | `/api/cron/collect` | `Authorization: Bearer $CRON_SECRET` 검증 |
-| GET | `/api/docs/` | drf-spectacular |
+| GET | `/api/schema/`, `/api/docs/` | OpenAPI 스키마, Swagger UI (drf-spectacular) |
 
 캐시 키는 `bt:{sha256(정렬된 파라미터)}:{data_version}`이다. 새 데이터가 들어오면 키가 바뀌므로 따로 지울 필요가 없다.
 
@@ -163,7 +164,7 @@ BacktestRun    params(JSON), params_hash, data_version, status, metrics(JSON),
 |---|---|---|
 | D1 | ✅ 완료 | Vercel 배포, 공개 URL의 `/api/health/`에서 DB·Redis 정상 확인 |
 | D2 | ✅ 완료 | 5종목 13,740행 백필(로컬·운영), 재수집 시 중복 0건, 테스트 37개. ETH·XRP 2017-10-21~23 결측은 업비트 원본에도 없음을 확인하고 해결 처리 |
-| D3 | ✅ 완료 | 백테스트 엔진(신호 하루 지연·수수료·지표), 조회·백테스트 API, Redis 캐시(파라미터 해시+데이터 버전), throttle, Swagger(`/api/docs/`), 테스트 79개. 운영: 함수·Redis를 DB와 같은 싱가포르로 옮겨 응답 4.2초 → 0.46초 |
+| D3 | ✅ 완료 | 백테스트 엔진(신호 하루 지연·수수료·지표), 조회·백테스트 API, Redis 캐시(파라미터 해시+데이터 버전), throttle, Swagger(`/api/docs/`), 관리자 화면, 테스트 85개. 운영: 함수·Redis를 DB와 같은 싱가포르로 옮겨 응답 4.2초 → 0.46초 |
 | D4 | ⏳ 다음 | Cron 수집, Sentry, README |
 
 ## 9. 면접 포인트
