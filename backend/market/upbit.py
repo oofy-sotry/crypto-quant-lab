@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import requests
@@ -29,6 +29,16 @@ class Candle:
     close: Decimal
     volume: Decimal
     value: Decimal
+
+
+def current_trading_day(now: datetime | None = None) -> date:
+    """지금 진행 중인(아직 마감 안 된) 업비트 일봉의 날짜.
+
+    업비트 일봉은 UTC 00:00(= KST 09:00)에 바뀐다. KST 달력 날짜를 쓰면
+    KST 00:00~09:00 사이에는 아직 진행 중인 전날 봉을 마감된 것으로 착각한다.
+    """
+    now = now or datetime.now(UTC)
+    return now.astimezone(UTC).date()
 
 
 def parse_candle(raw: dict) -> Candle:
