@@ -8,4 +8,5 @@ urlpatterns = [
     path("collection-runs/", views.CollectionRunListView.as_view(), name="collection-run-list"),
     path("integrity/summary/", views.IntegritySummaryView.as_view(), name="integrity-summary"),
     path("integrity/issues/", views.IntegrityIssueListView.as_view(), name="integrity-issue-list"),
+    path("cron/collect/", views.CronCollectView.as_view(), name="cron-collect"),
 ]
