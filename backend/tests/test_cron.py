@@ -107,3 +107,12 @@ def test_cron_collect_returns_500_only_when_all_assets_fail(client, status, code
 
     assert response.status_code == code
     assert response.json()["status"] == status
+
+
+@pytest.mark.django_db
+def test_cron_collect_is_hidden_from_openapi_schema(client):
+    schema = client.get("/api/schema/")
+
+    assert schema.status_code == 200
+    assert b"/api/cron/collect/" not in schema.content
+    assert b"/api/collection-runs/" in schema.content
