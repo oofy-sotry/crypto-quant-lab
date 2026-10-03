@@ -150,8 +150,9 @@ class CronCollectView(APIView):
 
     @extend_schema(responses=CollectionRunSerializer)
     def get(self, request):
-        expected = f"Bearer {settings.CRON_SECRET}"
-        received = request.headers.get("Authorization", "")
+        expected = f"Bearer {settings.CRON_SECRET}".encode()
+        # compare_digest는 영문이 아닌 글자가 섞인 str에 TypeError(500)를 내므로 bytes로 비교한다.
+        received = request.headers.get("Authorization", "").encode()
         # 비교 시간으로 비밀값을 한 글자씩 추측하지 못하게 상수 시간 비교를 쓴다.
         if not settings.CRON_SECRET or not hmac.compare_digest(received, expected):
             return Response({"detail": "인증 실패"}, status=401)
