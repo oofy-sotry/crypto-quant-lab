@@ -144,6 +144,22 @@ BacktestRun    asset, params(JSON), params_hash, data_version, metrics(JSON),
 - Cron `30 0 * * *`(UTC, KST 09:30). production 배포에서만 실행된다.
 - 백필은 Cron이 아니라 로컬 `manage.py collect --all`로 운영 DB에 직접 실행한다. 정기 수집은 `collect`(최근 7일)와 같은 함수를 쓴다.
 
+### 6.7 대시보드 화면 구성
+
+API 응답(JSON)은 사람이 읽기 어렵다. 링크 하나로 데이터 → 품질 → 백테스트 → 운영 상태를 눈으로 확인할 수 있게 화면을 나눈다. **첫 화면은 대시보드 홈**이고, API 서버의 `/`는 대시보드로 리다이렉트한다(지금은 404).
+
+| 경로 | 화면 | 보여 줄 것 | 쓰는 API |
+|---|---|---|---|
+| `/` | 홈 | 상태 요약 띠(서버 정상·마지막 수집·열린 error 수), 종목 카드 5개(최근 종가, 30일 수익률, 미니 추세선), 각 화면 바로가기 | health, integrity/summary, candles |
+| `/assets/[symbol]` | 가격 차트 | 캔들 + 이동평균선(짧은/긴 기간 조절), 기간 선택 | candles |
+| `/backtest` | 백테스트 | 입력 폼 → 지표 카드(전략 vs Buy&Hold), 누적수익 곡선, 드로다운 차트 | backtests |
+| `/integrity` | 데이터 품질 | 종목별 데이터 범위·열린 이슈 수 표, 이슈 목록(종목·유형·심각도·해결 여부 필터) | integrity/summary, integrity/issues |
+| `/status` | 운영 상태 | 서버 상태(DB·Redis 정상 여부와 응답 시간), 마지막 Cron 실행 후 경과 시간(26시간 넘으면 경고), 수집 기록 타임라인(성공/일부 실패/실패 색 구분, Cron·수동 구분), 날짜별 저장 건수 막대, 종목별 최신 확정일과 밀린 일수 | health, collection-runs, integrity/summary |
+
+- 모든 화면에 로딩·빈 데이터·오류 상태를 둔다. API가 죽어도 화면이 깨지지 않고 "API 응답 없음"을 보여 준다.
+- 운영 상태 화면이 README 한계의 "Cron이 아예 안 돌면 Sentry로 알 수 없다"를 보완한다.
+- 휴대폰 너비에서도 볼 수 있게 만든다(면접관이 링크를 폰으로 열 수 있음).
+
 ## 7. 일정 (7일, 하루 7~9시간)
 
 | 일차 | 작업 | 완료 기준 |
