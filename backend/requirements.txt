@@ -10,3 +10,4 @@ numpy>=2.0
 requests>=2.32
 drf-spectacular>=0.28
 sentry-sdk>=2.30
+django-cors-headers>=4.7
