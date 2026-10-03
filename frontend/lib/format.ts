@@ -8,6 +8,11 @@ export function formatKRW(value: number): string {
   return `${(value < 100 ? krwSmall : krw).format(value)}원`;
 }
 
+/** 차트 가격 축: 200000000 → "200,000,000" (단위 없이) */
+export function formatPriceAxis(value: number): string {
+  return (value < 100 ? krwSmall : krw).format(value);
+}
+
 /** 0.1234 → "+12.34%" (sign=true면 양수에 + 표시) */
 export function formatPercent(ratio: number, sign = false): string {
   const text = `${(ratio * 100).toFixed(2)}%`;
