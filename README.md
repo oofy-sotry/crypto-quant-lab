@@ -92,7 +92,7 @@ backend/
 | GET | `/api/collection-runs/` | 수집 실행 기록 |
 | POST | `/api/backtests/` | 백테스트 실행 (새로 계산 201, 기존 결과 200, 입력 오류 400, 데이터 문제 422, 분당 20회 초과 429) |
 | GET | `/api/backtests/{id}/` | 백테스트 결과 조회 |
-| GET | `/api/cron/collect/` | 정기 수집 (Vercel Cron 전용, `Authorization: Bearer <CRON_SECRET>` 필요) |
+| GET | `/api/cron/collect/` | 정기 수집 (Vercel Cron 전용, `Authorization: Bearer <CRON_SECRET>` 필요, 전 종목 실패 시 500, API 문서에는 숨김) |
 | GET | `/api/docs/`, `/api/schema/` | Swagger UI, OpenAPI 스키마 |
 
 일반 API는 IP당 분당 120회로 제한합니다. 제한 카운터는 Redis에 있어서 서버리스 인스턴스가 여러 개여도 함께 셉니다.
