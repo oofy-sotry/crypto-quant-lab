@@ -161,4 +161,7 @@ class CronCollectView(APIView):
             raise RuntimeError("Sentry 연동 확인용 의도적 오류")
 
         run = collect_candles(CollectionRun.Trigger.CRON)
-        return Response(CollectionRunSerializer(run).data)
+        # 전 종목 실패면 Vercel Cron 기록에도 실패로 남도록 500을 돌려준다.
+        # 일부 실패(partial)는 다음 날 7일 재수집으로 메워지므로 200으로 둔다.
+        failed = run.status == CollectionRun.Status.FAILED
+        return Response(CollectionRunSerializer(run).data, status=500 if failed else 200)
