@@ -28,6 +28,8 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         environment=env("VERCEL_ENV", default="production"),
+        # 오류가 어느 배포(커밋)에서 났는지 구분한다. Vercel이 빌드·실행 환경에 넣어 준다.
+        release=env("VERCEL_GIT_COMMIT_SHA", default=None),
         # 무료 플랜 한도를 아끼려고 성능 추적은 끄고 오류만 받는다.
         traces_sample_rate=0.0,
         # 요청자 IP·쿠키 같은 개인정보는 보내지 않는다.
