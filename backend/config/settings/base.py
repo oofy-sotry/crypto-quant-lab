@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "rest_framework",
     "drf_spectacular",
     "market",
@@ -31,6 +32,8 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    # CommonMiddleware보다 앞에 둬야 리다이렉트 응답에도 CORS 헤더가 붙는다.
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -101,6 +104,11 @@ REST_FRAMEWORK = {
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+# 브라우저에서 API를 직접 부르는 곳(대시보드)만 허용한다. 백테스트 실행은 사용자 브라우저가
+# 직접 호출해야 IP별 throttle이 사용자마다 따로 적용된다(대시보드 서버를 거치면 한도를 나눠 씀).
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"])
+CORS_URLS_REGEX = r"^/api/.*$"
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "crypto-quant-lab API",
