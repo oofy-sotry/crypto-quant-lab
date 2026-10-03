@@ -56,7 +56,9 @@ export function baseChartOptions(c: ChartColors): DeepPartial<ChartOptions> {
     },
     grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
     rightPriceScale: { borderColor: c.border },
-    timeScale: { borderColor: c.border },
+    // 기본 최소 봉 간격(0.5px)이면 수년치 일봉(2천 개 이상)이 화면 너비에 다 안 들어가서
+    // fitContent를 해도 앞부분이 잘린다. 더 촘촘하게 줄일 수 있게 한다.
+    timeScale: { borderColor: c.border, minBarSpacing: 0.05 },
     localization: { locale: "ko-KR" },
   };
 }
