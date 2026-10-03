@@ -1,3 +1,6 @@
+import hmac
+
+from django.conf import settings
 from django.db.models import Count, Max, Min, Q
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -15,6 +18,7 @@ from market.serializers import (
     IntegrityIssueSerializer,
     IntegritySummarySerializer,
 )
+from market.services import collect_candles
 
 
 class AssetListView(generics.ListAPIView):
@@ -130,3 +134,30 @@ class IntegritySummaryView(APIView):
                 "last_run": CollectionRunSerializer(last_run).data if last_run else None,
             }
         )
+
+
+class CronCollectView(APIView):
+    """Vercel Cron이 매일 호출하는 수집 엔드포인트. 최근 7일을 다시 받아 저장한다.
+
+    `Authorization: Bearer <CRON_SECRET>` 헤더가 맞아야 실행된다.
+    `?sentry_test=1`이면 수집 대신 일부러 예외를 내서 Sentry 연동을 확인한다.
+    """
+
+    # 사용자 인증·Redis throttle과 무관하게 비밀값 하나로만 판단한다.
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = []
+
+    @extend_schema(responses=CollectionRunSerializer)
+    def get(self, request):
+        expected = f"Bearer {settings.CRON_SECRET}"
+        received = request.headers.get("Authorization", "")
+        # 비교 시간으로 비밀값을 한 글자씩 추측하지 못하게 상수 시간 비교를 쓴다.
+        if not settings.CRON_SECRET or not hmac.compare_digest(received, expected):
+            return Response({"detail": "인증 실패"}, status=401)
+
+        if request.query_params.get("sentry_test") == "1":
+            raise RuntimeError("Sentry 연동 확인용 의도적 오류")
+
+        run = collect_candles(CollectionRun.Trigger.CRON)
+        return Response(CollectionRunSerializer(run).data)
