@@ -148,7 +148,8 @@ class CronCollectView(APIView):
     permission_classes = []
     throttle_classes = []
 
-    @extend_schema(responses=CollectionRunSerializer)
+    # Vercel Cron 전용 내부 엔드포인트라 공개 API 문서(Swagger)에는 싣지 않는다.
+    @extend_schema(exclude=True)
     def get(self, request):
         expected = f"Bearer {settings.CRON_SECRET}".encode()
         # compare_digest는 영문이 아닌 글자가 섞인 str에 TypeError(500)를 내므로 bytes로 비교한다.
