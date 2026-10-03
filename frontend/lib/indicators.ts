@@ -14,6 +14,15 @@ export function sma(points: Point[], period: number): Point[] {
   return result;
 }
 
+/** 각 시점의 고점 대비 하락률 (0 또는 음수, -0.3 = 고점 대비 -30%). 백엔드 drawdown과 같은 정의. */
+export function drawdowns(values: number[]): number[] {
+  let peak = -Infinity;
+  return values.map((v) => {
+    peak = Math.max(peak, v);
+    return peak > 0 ? v / peak - 1 : 0;
+  });
+}
+
 /** 처음 값 대비 마지막 값의 변화율 (0.1 = +10%) */
 export function changeRatio(values: number[]): number {
   if (values.length < 2 || values[0] === 0) return 0;
