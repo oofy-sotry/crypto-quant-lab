@@ -165,7 +165,8 @@ BacktestRun    asset, params(JSON), params_hash, data_version, metrics(JSON),
 | D1 | ✅ 완료 | Vercel 배포, 공개 URL의 `/api/health/`에서 DB·Redis 정상 확인 |
 | D2 | ✅ 완료 | 5종목 13,740행 백필(로컬·운영), 재수집 시 중복 0건, 테스트 37개. ETH·XRP 2017-10-21~23 결측은 업비트 원본에도 없음을 확인하고 해결 처리 |
 | D3 | ✅ 완료 | 백테스트 엔진(신호 하루 지연·수수료·지표), 조회·백테스트 API, Redis 캐시(파라미터 해시+데이터 버전), throttle, Swagger(`/api/docs/`), 관리자 화면, 테스트 85개. 운영: 함수·Redis를 DB와 같은 싱가포르로 옮겨 응답 4.2초 → 0.46초 |
-| D4 | ⏳ 다음 | Cron 수집, Sentry, README |
+| D4 | ✅ 완료 | Vercel Cron(매일 KST 09:30) + `CRON_SECRET` 인증, Sentry(운영 오류 수신 확인), README 1차, 테스트 93개. 운영에서 Cron 엔드포인트 수동 호출로 5종목 35건 수집, 배포 API 백테스트 성공. Cron 자동 실행은 D5 아침에 확인 |
+| D5 | ⏳ 다음 | Cron 자동 실행 확인, Next.js 대시보드 ① |
 
 ## 9. 면접 포인트
 
