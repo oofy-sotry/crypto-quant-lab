@@ -20,7 +20,7 @@
 | 데이터·계산 | pandas, numpy, Decimal |
 | DB·캐시 | MySQL 8 (운영: Aiven), Redis (운영: Upstash) |
 | 배포·운영 | Vercel (서버리스 함수 + Cron), Sentry |
-| 품질 | pytest (테스트 93개), ruff, GitHub Actions |
+| 품질 | pytest (테스트 97개), ruff, GitHub Actions |
 
 ## 아키텍처
 
@@ -133,7 +133,7 @@ python manage.py runserver
 
 ```bash
 cd backend
-pytest          # 93개, MySQL·Redis 컨테이너가 떠 있어야 함
+pytest          # 97개, MySQL·Redis 컨테이너가 떠 있어야 함
 ruff check . && ruff format --check .
 ```
 
