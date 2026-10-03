@@ -37,7 +37,7 @@ Claude Code로 코드를 작성하면 구현 자체는 며칠이면 끝난다. �
 | 등급 | 항목 |
 |---|---|
 | Must | 수집·백필, upsert, 무결성 검사, 백테스트(MA 교차 + Buy&Hold), DRF API, Redis 캐시, Vercel 배포 + Cron, README |
-| Should | Next.js 대시보드(차트·백테스트 폼·무결성 화면), Sentry, CI의 MySQL + pytest, Swagger |
+| Should | Next.js 대시보드(홈·차트·백테스트·데이터 품질·운영 상태 화면, 6.7절), Sentry, CI의 MySQL + pytest, Swagger |
 | Could | Celery 그리드 탐색 + 히트맵, 다음날 시가 체결 옵션, 데모 GIF |
 
 ## 5. 아키텍처
