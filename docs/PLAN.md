@@ -48,7 +48,7 @@ Claude Code로 코드를 작성하면 구현 자체는 며칠이면 끝난다. �
 | 프론트 | Next.js | Vercel 프로젝트 ② (Root: `frontend`) |
 | DB | MySQL 컨테이너 | Aiven MySQL (싱가포르, 무료 플랜, SSL) |
 | 캐시 | Redis 컨테이너 | Upstash Redis (싱가포르 primary) |
-| 정기 수집 | Celery beat | Vercel Cron → `/api/cron/collect` |
+| 정기 수집 | Celery beat | Vercel Cron → `/api/cron/collect/` |
 | 비동기 작업 | Celery worker | 동기 실행(`BACKTEST_EXECUTOR=sync`) |
 | 모니터링 | 로그 | Sentry |
 
@@ -130,7 +130,7 @@ BacktestRun    asset, params(JSON), params_hash, data_version, metrics(JSON),
 | POST | `/api/backtests/` | 새로 계산 201 / 기존 결과 200 / 입력 오류 400 / 데이터 오류 422 / 분당 20회 초과 429 |
 | GET | `/api/backtests/{id}/` | |
 | POST | `/api/backtests/grid/` | (Could) 로컬에서는 Celery로 202 응답 |
-| GET | `/api/cron/collect` | `Authorization: Bearer $CRON_SECRET` 검증 |
+| GET | `/api/cron/collect/` | `Authorization: Bearer $CRON_SECRET` 검증(비어 있으면 전부 거부), throttle 제외. 끝의 `/` 필수(Cron은 리다이렉트를 따라가지 않음) |
 | GET | `/api/schema/`, `/api/docs/` | OpenAPI 스키마, Swagger UI (drf-spectacular) |
 
 캐시 키는 `bt:{sha256(정렬된 파라미터)}:{data_version}`이다. 새 데이터가 들어오면 키가 바뀌므로 따로 지울 필요가 없다.
