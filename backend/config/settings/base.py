@@ -11,6 +11,9 @@ SECRET_KEY = env("SECRET_KEY")
 DEBUG = env.bool("DEBUG", default=False)
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
+# Vercel Cron이 Authorization: Bearer 헤더로 보내는 값. 비어 있으면 Cron 엔드포인트는 모두 거부한다.
+CRON_SECRET = env("CRON_SECRET", default="")
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
