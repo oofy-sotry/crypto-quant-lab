@@ -45,8 +45,8 @@ def test_cron_collect_runs_with_valid_secret(client, fake_collect):
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "header",
-    [None, "Bearer wrong-secret", SECRET, f"Basic {SECRET}"],
-    ids=["missing", "wrong", "no-scheme", "basic"],
+    [None, "Bearer wrong-secret", SECRET, f"Basic {SECRET}", "Bearer é"],
+    ids=["missing", "wrong", "no-scheme", "basic", "non-ascii"],
 )
 def test_cron_collect_rejects_bad_authorization(client, fake_collect, header):
     extra = {"HTTP_AUTHORIZATION": header} if header else {}
