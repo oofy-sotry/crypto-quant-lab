@@ -15,18 +15,24 @@ def cron_secret(settings):
     settings.CRON_SECRET = SECRET
 
 
-@pytest.fixture
-def fake_collect():
+def make_collect(status):
     def run(trigger):
         return CollectionRun.objects.create(
             trigger=trigger,
-            status=CollectionRun.Status.SUCCESS,
+            status=status,
             finished_at=timezone.now(),
             assets_count=5,
             upserted_count=35,
         )
 
-    with patch("market.views.collect_candles", side_effect=run) as mock:
+    return run
+
+
+@pytest.fixture
+def fake_collect():
+    with patch(
+        "market.views.collect_candles", side_effect=make_collect(CollectionRun.Status.SUCCESS)
+    ) as mock:
         yield mock
 
 
@@ -87,3 +93,17 @@ def test_cron_collect_is_not_throttled(client, fake_collect):
         ]
 
     assert codes == [200, 200, 200]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(CollectionRun.Status.PARTIAL, 200), (CollectionRun.Status.FAILED, 500)],
+)
+def test_cron_collect_returns_500_only_when_all_assets_fail(client, status, code):
+    """전 종목 실패만 Vercel Cron 기록에 실패로 남긴다. 일부 실패는 다음 날 재수집으로 메워진다."""
+    with patch("market.views.collect_candles", side_effect=make_collect(status)):
+        response = client.get(URL, HTTP_AUTHORIZATION=f"Bearer {SECRET}")
+
+    assert response.status_code == code
+    assert response.json()["status"] == status
