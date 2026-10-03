@@ -141,7 +141,7 @@ BacktestRun    asset, params(JSON), params_hash, data_version, metrics(JSON),
 - 정적 파일은 Vercel이 빌드 때 collectstatic 후 CDN으로 서빙(WhiteNoise는 로컬용)
 - 번들 크기·함수 실행 시간 제한은 D1에 확인
 - 함수·DB·캐시는 같은 리전(싱가포르)에 둔다. 함수 리전은 `backend/vercel.json`의 `regions`로 고정
-- Cron `30 0 * * *`(UTC, KST 09:30). production 배포에서만 실행된다.
+- Cron `30 0 * * *`(UTC, KST 09:30). Hobby 플랜은 지정한 시간대 안 아무 때나 실행되므로 실제로는 KST 09:00~09:59. 일봉 마감(09:00) 이후라 문제없다. production 배포에서만 실행된다.
 - 백필은 Cron이 아니라 로컬 `manage.py collect --all`로 운영 DB에 직접 실행한다. 정기 수집은 `collect`(최근 7일)와 같은 함수를 쓴다.
 
 ### 6.7 대시보드 화면 구성
@@ -181,7 +181,7 @@ API 응답(JSON)은 사람이 읽기 어렵다. 링크 하나로 데이터 → �
 | D1 | ✅ 완료 | Vercel 배포, 공개 URL의 `/api/health/`에서 DB·Redis 정상 확인 |
 | D2 | ✅ 완료 | 5종목 13,740행 백필(로컬·운영), 재수집 시 중복 0건, 테스트 37개. ETH·XRP 2017-10-21~23 결측은 업비트 원본에도 없음을 확인하고 해결 처리 |
 | D3 | ✅ 완료 | 백테스트 엔진(신호 하루 지연·수수료·지표), 조회·백테스트 API, Redis 캐시(파라미터 해시+데이터 버전), throttle, Swagger(`/api/docs/`), 관리자 화면, 테스트 85개. 운영: 함수·Redis를 DB와 같은 싱가포르로 옮겨 응답 4.2초 → 0.46초 |
-| D4 | ✅ 완료 | Vercel Cron(매일 KST 09:30) + `CRON_SECRET` 인증, Sentry(운영 오류 수신 확인), README 1차, 테스트 93개. 운영에서 Cron 엔드포인트 수동 호출로 5종목 35건 수집, 배포 API 백테스트 성공. Cron 자동 실행은 D5 아침에 확인 |
+| D4 | ✅ 완료 | Vercel Cron(매일 KST 09시대) + `CRON_SECRET` 인증, Sentry(운영 오류 수신 확인), README 1차, 점검(비ASCII 헤더 500·전 종목 실패 응답 코드 수정), 테스트 97개. 운영에서 Cron 엔드포인트 수동 호출로 5종목 35건 수집, 배포 API 백테스트 성공. Cron 자동 실행은 D5 아침에 확인 |
 | D5 | ⏳ 다음 | Cron 자동 실행 확인, 대시보드 ①(홈·가격 차트·백테스트), `/` → 대시보드 |
 
 ## 9. 면접 포인트
