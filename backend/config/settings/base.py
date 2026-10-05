@@ -110,6 +110,9 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:3000"])
 CORS_URLS_REGEX = r"^/api/.*$"
 
+# API 서버 첫 화면(/)에서 보낼 대시보드 주소. 비어 있으면 /는 404.
+DASHBOARD_URL = env("DASHBOARD_URL", default="")
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "crypto-quant-lab API",
     "DESCRIPTION": "업비트 코인 일봉 수집·무결성 검사·백테스트 API",
