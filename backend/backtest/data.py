@@ -19,12 +19,18 @@ def load_close(asset: Asset, start: date, end: date, warmup_days: int = 0) -> pd
     """
     first_needed = start - timedelta(days=warmup_days + 1)
 
-    open_errors = IntegrityIssue.objects.filter(
-        asset=asset,
-        severity=IntegrityIssue.Severity.ERROR,
-        resolved_at__isnull=True,
-        date__range=(first_needed, end),
-    ).order_by("date")
+    # 수집 지연(stale)은 빼고 본다. "새 데이터가 안 들어온다"는 뜻이지 있는 데이터가 틀린 게 아니고,
+    # end가 마지막 확정 봉보다 늦으면 아래에서 따로 거부한다.
+    open_errors = (
+        IntegrityIssue.objects.filter(
+            asset=asset,
+            severity=IntegrityIssue.Severity.ERROR,
+            resolved_at__isnull=True,
+            date__range=(first_needed, end),
+        )
+        .exclude(type=IntegrityIssue.Type.STALE)
+        .order_by("date")
+    )
     if open_errors.exists():
         dates = ", ".join(str(d) for d in open_errors.values_list("date", flat=True)[:5])
         raise DataNotReady(f"기간 안에 해결되지 않은 데이터 오류가 있습니다: {dates}")
