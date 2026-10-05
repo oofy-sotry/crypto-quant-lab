@@ -184,6 +184,6 @@ ruff check . && ruff format --check .
 
 ## 다음 작업
 
-- 대시보드 남은 화면: 데이터 품질(`/integrity`), 운영 상태(`/status`, Cron·수집 기록)
-- CI에 MySQL + pytest
+- 수집이 끝나면 대시보드 캐시를 바로 갱신(on-demand revalidation)
+- Cron 미실행 자동 알림(하트비트 모니터링)
 - (선택) Celery로 파라미터 그리드 탐색, 다음 날 시가 체결 옵션
