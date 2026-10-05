@@ -141,6 +141,12 @@ export function getIntegritySummary() {
   return getJSON<IntegritySummary>("/api/integrity/summary/");
 }
 
+/** 수집 실행 기록(최신순, 최대 100개) */
+export async function getCollectionRuns() {
+  const page = await getJSON<{ results: CollectionRun[] }>("/api/collection-runs/");
+  return page.results;
+}
+
 /** 무결성 이슈(최신 날짜순, 최대 100개)와 조건에 맞는 전체 개수. 빈 필터는 보내지 않는다. */
 export async function getIntegrityIssues(filters: IssueFilters) {
   const query = new URLSearchParams(
