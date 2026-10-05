@@ -36,6 +36,18 @@ function toParams(f: Form): BacktestParams | string {
   return params;
 }
 
+/**
+ * 이 종목으로 가능한 가장 이른 시작일. 서버는 시작일 전날 종가와 장기 이동평균 워밍업(long일)이 필요하다.
+ * 상장이 늦은 종목으로 바꿨을 때 시작일을 그대로 두면 계산이 거부되므로 이 날짜로 당긴다.
+ */
+function earliestStart(asset: AssetSummary, f: Form): string | null {
+  if (!asset.first_date) return null;
+  const warmup = f.strategy === "ma_cross" ? Number(f.long) || 0 : 0;
+  const d = new Date(`${asset.first_date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + warmup + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function BacktestView({ assets }: { assets: AssetSummary[] }) {
   const first = assets.find((a) => a.symbol === "KRW-BTC") ?? assets[0];
   const [form, setForm] = useState<Form>({
@@ -116,7 +128,12 @@ export function BacktestView({ assets }: { assets: AssetSummary[] }) {
             value={form.symbol}
             onChange={(e) => {
               const next = assets.find((a) => a.symbol === e.target.value);
-              set({ symbol: e.target.value, end: next?.last_final_date ?? form.end });
+              const earliest = next ? earliestStart(next, form) : null;
+              set({
+                symbol: e.target.value,
+                start: earliest && form.start < earliest ? earliest : form.start,
+                end: next?.last_final_date ?? form.end,
+              });
             }}
           >
             {assets.map((a) => (
