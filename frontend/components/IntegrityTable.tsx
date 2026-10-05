@@ -10,7 +10,7 @@ function Count({ value, tone }: { value: number; tone: "error" | "warn" }) {
 export function IntegrityTable({ assets }: { assets: AssetSummary[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm whitespace-nowrap">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted">
             <th className="py-2 pr-2 font-normal">종목</th>
@@ -29,7 +29,7 @@ export function IntegrityTable({ assets }: { assets: AssetSummary[] }) {
                   <div className="text-xs text-muted">{a.symbol}</div>
                 </Link>
               </td>
-              <td className="num px-2 py-2 whitespace-nowrap">
+              <td className="num px-2 py-2">
                 {a.first_date ?? "-"} ~ {a.last_final_date ?? "-"}
               </td>
               <td className="num px-2 py-2 text-right">{a.candle_count.toLocaleString("ko-KR")}</td>
