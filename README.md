@@ -24,6 +24,36 @@
 
 ## 아키텍처
 
+```mermaid
+flowchart LR
+    user([사용자 브라우저])
+    upbit[(업비트 공개 API)]
+
+    subgraph vercel_front [Vercel · 대시보드 프로젝트]
+        next[Next.js 대시보드<br/>API 응답 5분 캐시]
+        reval["POST /api/revalidate"]
+    end
+
+    subgraph vercel_back [Vercel · API 프로젝트 · 싱가포르]
+        cron[[Vercel Cron<br/>매일 KST 09시대]]
+        api[Django REST API<br/>수집 · 무결성 검사<br/>백테스트]
+    end
+
+    mysql[(Aiven MySQL<br/>일봉 · 이슈 · 결과)]
+    redis[(Upstash Redis<br/>백테스트 캐시<br/>요청 제한)]
+    sentry[Sentry]
+
+    user -- 화면 --> next
+    next -- 조회 --> api
+    user -- 백테스트 실행<br/>CORS · IP별 요청 제한 --> api
+    cron -- Bearer 비밀값 --> api
+    api -- 최근 7일 일봉 --> upbit
+    api --> mysql
+    api --> redis
+    api -- 수집 후 캐시 즉시 만료 --> reval
+    api -. 처리 안 된 예외 .-> sentry
+```
+
 | 구분 | 로컬 | 운영 |
 |---|---|---|
 | 대시보드 | `next dev` | Vercel 별도 프로젝트 (Root Directory `frontend`) |
