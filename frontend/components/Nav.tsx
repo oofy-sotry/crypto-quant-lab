@@ -14,7 +14,7 @@ const LINKS = [
 export function Nav() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 text-sm">
+    <nav className="flex max-w-full gap-1 overflow-x-auto text-sm whitespace-nowrap [scrollbar-width:none]">
       {LINKS.map(({ href, label, match }) => {
         const active = match(pathname);
         return (
