@@ -151,7 +151,7 @@ API 서버의 CORS 기본값이 `http://localhost:3000`이라 따로 설정할 �
 
 ```bash
 cd backend
-pytest          # 97개, MySQL·Redis 컨테이너가 떠 있어야 함
+pytest          # 102개, MySQL·Redis 컨테이너가 떠 있어야 함
 ruff check . && ruff format --check .
 ```
 
