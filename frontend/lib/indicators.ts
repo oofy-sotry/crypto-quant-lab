@@ -14,12 +14,15 @@ export function sma(points: Point[], period: number): Point[] {
   return result;
 }
 
-/** 각 시점의 고점 대비 하락률 (0 또는 음수, -0.3 = 고점 대비 -30%). 백엔드 drawdown과 같은 정의. */
-export function drawdowns(values: number[]): number[] {
-  let peak = -Infinity;
-  return values.map((v) => {
+/**
+ * 자산 곡선(1.0에서 시작하는 배수)의 각 시점 고점 대비 하락률 (0 또는 음수, -0.3 = 고점 대비 -30%).
+ * 백엔드와 같은 정의: 시작 자산 1.0도 고점 후보라서 첫날부터 떨어진 것도 낙폭에 들어간다.
+ */
+export function drawdowns(equity: number[]): number[] {
+  let peak = 1;
+  return equity.map((v) => {
     peak = Math.max(peak, v);
-    return peak > 0 ? v / peak - 1 : 0;
+    return v / peak - 1;
   });
 }
 
