@@ -18,13 +18,15 @@
 | 백엔드 | Python 3.12, Django 5.2, Django REST Framework, drf-spectacular |
 | 데이터·계산 | pandas, numpy, Decimal |
 | DB·캐시 | MySQL 8 (운영: Aiven), Redis (운영: Upstash) |
-| 배포·운영 | Vercel (서버리스 함수 + Cron), Sentry |
-| 품질 | pytest (테스트 97개), ruff, GitHub Actions |
+| 프론트엔드 | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, lightweight-charts |
+| 배포·운영 | Vercel (서버리스 함수 + Cron, 대시보드는 별도 프로젝트), Sentry |
+| 품질 | pytest (테스트 102개), ruff, ESLint, GitHub Actions |
 
 ## 아키텍처
 
 | 구분 | 로컬 | 운영 |
 |---|---|---|
+| 대시보드 | `next dev` | Vercel 별도 프로젝트 (Root Directory `frontend`) |
 | API | `manage.py runserver` | Vercel 서버리스 함수 (싱가포르 `sin1`) |
 | DB | MySQL 컨테이너 | Aiven MySQL (싱가포르, SSL) |
 | 캐시·요청 제한 | Redis 컨테이너 | Upstash Redis (싱가포르) |
@@ -39,6 +41,10 @@ backend/
 ├── market/      업비트 클라이언트, 수집·upsert, 무결성 검사, 조회 API, Cron API
 ├── backtest/    전략, 시뮬레이션 엔진, 성과 지표, 결과 저장·캐시, 백테스트 API
 └── tests/       pytest
+frontend/
+├── app/         화면(홈 /, 가격 차트 /assets/[symbol], 백테스트 /backtest)
+├── components/  상태 요약 띠, 종목 카드, 백테스트 폼·지표 비교, charts/(캔들·비율 차트)
+└── lib/         API 호출·타입, 표시 형식, 이동평균·드로다운 계산
 ```
 
 ## 주요 기능
