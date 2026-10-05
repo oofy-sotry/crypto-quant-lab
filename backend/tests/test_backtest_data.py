@@ -69,7 +69,9 @@ def test_load_close_ignores_resolved_errors_and_warnings(btc):
 
 @pytest.mark.django_db
 def test_load_close_rejects_insufficient_warmup(btc):
-    with pytest.raises(DataNotReady, match="워밍업"):
+    # 1/3 - 5일 - 1일 = 12/28부터 필요한데 데이터는 1/1부터다.
+    # 두 날짜를 모두 알려 줘야 사용자가 시작일을 고칠 수 있다.
+    with pytest.raises(DataNotReady, match="2026-01-01부터.*2025-12-28부터"):
         load_close(btc, start=date(2026, 1, 3), end=date(2026, 1, 20), warmup_days=5)
 
 
