@@ -116,3 +116,22 @@ def test_cron_collect_is_hidden_from_openapi_schema(client):
     assert schema.status_code == 200
     assert b"/api/cron/collect/" not in schema.content
     assert b"/api/collection-runs/" in schema.content
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("status", "should_revalidate"),
+    [
+        (CollectionRun.Status.SUCCESS, True),
+        (CollectionRun.Status.PARTIAL, True),
+        (CollectionRun.Status.FAILED, False),
+    ],
+)
+def test_cron_collect_revalidates_dashboard_unless_failed(client, status, should_revalidate):
+    with (
+        patch("market.views.collect_candles", side_effect=make_collect(status)),
+        patch("market.views.revalidate_dashboard") as revalidate,
+    ):
+        client.get(URL, HTTP_AUTHORIZATION=f"Bearer {SECRET}")
+
+    assert revalidate.called is should_revalidate
