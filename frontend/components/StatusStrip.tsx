@@ -1,9 +1,6 @@
 import type { Health, IntegritySummary } from "@/lib/api";
 import { formatDateTime, hoursSince } from "@/lib/format";
-import { RUN_STATE_TEXT, runState, TRIGGER_TEXT } from "@/lib/runs";
-
-// Cron은 하루 1번(무료 플랜이라 09시대 중 아무 때) 돈다. 하루 + 실행 시각 오차를 넘기면 경고.
-const STALE_HOURS = 26;
+import { RUN_STATE_TEXT, runState, STALE_HOURS, TRIGGER_TEXT } from "@/lib/runs";
 
 type Tone = "ok" | "warn" | "error";
 

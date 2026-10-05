@@ -18,6 +18,9 @@ export const TRIGGER_TEXT: Record<CollectionRun["trigger"], string> = {
   beat: "Celery",
 };
 
+// Cron은 하루 1번(무료 플랜이라 09시대 중 아무 때) 돈다. 하루 + 실행 시각 오차를 넘기면 경고.
+export const STALE_HOURS = 26;
+
 // 함수 제한 시간(300초)보다 넉넉히 길게. 이보다 오래 running이면 함수가 강제 종료돼 상태를 못 바꾼 것이다.
 const STALLED_MINUTES = 10;
 
