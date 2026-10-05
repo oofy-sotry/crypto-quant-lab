@@ -135,6 +135,18 @@ python manage.py runserver
 
 이후 최근 7일만 다시 받을 때는 `python manage.py collect`를 실행합니다.
 
+### 대시보드
+
+필요한 것: Node.js 20.9 이상, 위의 API 서버(8000번)가 실행 중일 것
+
+```bash
+cd frontend
+npm install
+NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000 npx next dev -p 3000   # → http://localhost:3000
+```
+
+API 서버의 CORS 기본값이 `http://localhost:3000`이라 따로 설정할 필요가 없습니다.
+
 ### 테스트
 
 ```bash
