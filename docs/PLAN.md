@@ -48,11 +48,11 @@ Claude Code로 코드를 작성하면 구현 자체는 며칠이면 끝난다. �
 | 프론트 | Next.js | Vercel 프로젝트 ② (Root: `frontend`) |
 | DB | MySQL 컨테이너 | Aiven MySQL (싱가포르, 무료 플랜, SSL) |
 | 캐시 | Redis 컨테이너 | Upstash Redis (싱가포르 primary) |
-| 정기 수집 | Celery beat | Vercel Cron → `/api/cron/collect/` |
-| 비동기 작업 | Celery worker | 동기 실행(`BACKTEST_EXECUTOR=sync`) |
+| 정기 수집 | `manage.py collect` 수동 실행 | Vercel Cron → `/api/cron/collect/` |
+| 비동기 작업 | 없음(요청 안에서 동기 실행) | 없음(요청 안에서 동기 실행) |
 | 모니터링 | 로그 | Sentry |
 
-Vercel은 서버리스라 상시 실행되는 worker/beat를 띄울 수 없다. 그래서 정기 수집은 Cron으로, 무거운 작업은 로컬 Celery로 나눴다. 이 트레이드오프를 README에 적는다.
+Vercel은 서버리스라 상시 실행되는 worker/beat를 띄울 수 없다. 그래서 Celery는 넣지 않고 정기 수집은 Cron으로 했다(처음에는 로컬에 Celery worker/beat를 두려 했으나 구현하지 않음). 수집 로직은 `collect_candles` 함수 하나라서, 상주 서버로 옮기면 Celery task와 beat 스케줄만 추가하면 된다. 이 트레이드오프를 README에 적는다.
 
 ```
 crypto-quant-lab/
