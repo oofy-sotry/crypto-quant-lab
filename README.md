@@ -20,7 +20,7 @@
 | DB·캐시 | MySQL 8 (운영: Aiven), Redis (운영: Upstash) |
 | 프론트엔드 | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, lightweight-charts |
 | 배포·운영 | Vercel (서버리스 함수 + Cron, 대시보드는 별도 프로젝트), Sentry |
-| 품질 | pytest (테스트 102개), ruff, ESLint, GitHub Actions |
+| 품질 | pytest (테스트 102개), ruff, ESLint, GitHub Actions (lint + MySQL·Redis 컨테이너로 pytest) |
 
 ## 아키텍처
 
