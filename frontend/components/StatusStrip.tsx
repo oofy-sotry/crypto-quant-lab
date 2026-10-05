@@ -1,5 +1,6 @@
 import type { Health, IntegritySummary } from "@/lib/api";
 import { formatDateTime, hoursSince } from "@/lib/format";
+import { RUN_STATE_TEXT, runState, TRIGGER_TEXT } from "@/lib/runs";
 
 // Cron은 하루 1번(무료 플랜이라 09시대 중 아무 때) 돈다. 하루 + 실행 시각 오차를 넘기면 경고.
 const STALE_HOURS = 26;
@@ -25,9 +26,6 @@ function Item({ tone, label, value, detail }: { tone: Tone; label: string; value
   );
 }
 
-const STATUS_TEXT = { success: "성공", partial: "일부 실패", failed: "실패", running: "실행 중" };
-const TRIGGER_TEXT = { cron: "자동", manual: "수동", backfill: "백필", beat: "Celery" };
-
 /** 홈 맨 위의 운영 상태 요약: 서버, 마지막 수집, 데이터 오류 */
 export function StatusStrip({ health, summary }: { health: Health | null; summary: IntegritySummary | null }) {
   const server: [Tone, string, string | undefined] = !health
@@ -40,8 +38,8 @@ export function StatusStrip({ health, summary }: { health: Health | null; summar
   const collection: [Tone, string, string | undefined] = !run
     ? ["warn", "기록 없음", undefined]
     : [
-        run.status === "failed" ? "error" : run.status === "success" && hoursSince(run.started_at) <= STALE_HOURS ? "ok" : "warn",
-        `${formatDateTime(run.started_at)} ${STATUS_TEXT[run.status]}`,
+        run.status === "failed" || runState(run) === "stalled" ? "error" : run.status === "success" && hoursSince(run.started_at) <= STALE_HOURS ? "ok" : "warn",
+        `${formatDateTime(run.started_at)} ${RUN_STATE_TEXT[runState(run)]}`,
         hoursSince(run.started_at) > STALE_HOURS
           ? `${Math.floor(hoursSince(run.started_at))}시간 동안 수집 없음`
           : `${TRIGGER_TEXT[run.trigger]} · ${run.upserted_count}건 저장`,
