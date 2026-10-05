@@ -6,7 +6,7 @@
 업비트 공개 API → 일봉 수집(매일 Cron) → 무결성 검사 → pandas 백테스트 → DRF API (+ Redis 캐시) → Next.js 대시보드
 ```
 
-- **대시보드:** https://crypto-quant-dashboard-oofysotry.vercel.app (홈·가격 차트·백테스트)
+- **대시보드:** https://crypto-quant-dashboard-oofysotry.vercel.app (홈·가격 차트·백테스트·데이터 품질·운영 상태)
 - **운영 API:** https://crypto-quant-lab-oofysotry.vercel.app/api/health/ (API 주소 `/`로 들어오면 대시보드로 이동)
 - **API 문서(Swagger):** https://crypto-quant-lab-oofysotry.vercel.app/api/docs/
 - 대상 종목: KRW-BTC, KRW-ETH, KRW-XRP, KRW-SOL, KRW-DOGE (상장일부터 약 13,700개 일봉)
@@ -42,7 +42,7 @@ backend/
 ├── backtest/    전략, 시뮬레이션 엔진, 성과 지표, 결과 저장·캐시, 백테스트 API
 └── tests/       pytest
 frontend/
-├── app/         화면(홈 /, 가격 차트 /assets/[symbol], 백테스트 /backtest)
+├── app/         화면(홈 /, 가격 차트 /assets/[symbol], 백테스트 /backtest, 데이터 품질 /integrity, 운영 상태 /status)
 ├── components/  상태 요약 띠, 종목 카드, 백테스트 폼·지표 비교, charts/(캔들·비율 차트)
 └── lib/         API 호출·타입, 표시 형식, 이동평균·드로다운 계산
 ```
