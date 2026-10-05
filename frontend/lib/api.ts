@@ -121,10 +121,13 @@ export class ApiError extends Error {
   }
 }
 
+// 캐시한 API 응답에 붙이는 태그. 백엔드가 수집을 마치면 /api/revalidate로 이 태그를 바로 만료시킨다.
+export const API_CACHE_TAG = "api";
+
 // 시간 기반 캐시는 만료 뒤 첫 요청에 옛 값을 주고 뒤에서 갱신한다(stale-while-revalidate).
 // 운영 상태처럼 "지금" 값이 중요한 화면은 fresh=true로 캐시를 쓰지 않는다.
 function cacheOption(fresh: boolean, revalidate = REVALIDATE_SECONDS): RequestInit {
-  return fresh ? { cache: "no-store" } : { next: { revalidate } };
+  return fresh ? { cache: "no-store" } : { next: { revalidate, tags: [API_CACHE_TAG] } };
 }
 
 async function getJSON<T>(path: string, fresh = false): Promise<T> {
