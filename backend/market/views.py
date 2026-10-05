@@ -9,6 +9,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from market.dashboard import revalidate_dashboard
 from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue
 from market.serializers import (
     AssetSerializer,
@@ -165,4 +166,7 @@ class CronCollectView(APIView):
         # 전 종목 실패면 Vercel Cron 기록에도 실패로 남도록 500을 돌려준다.
         # 일부 실패(partial)는 다음 날 7일 재수집으로 메워지므로 200으로 둔다.
         failed = run.status == CollectionRun.Status.FAILED
+        if not failed:
+            # 새 데이터가 들어왔으니 대시보드가 이전 캐시를 보여 주지 않게 바로 갱신시킨다.
+            revalidate_dashboard()
         return Response(CollectionRunSerializer(run).data, status=500 if failed else 200)
