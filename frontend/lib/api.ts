@@ -52,6 +52,28 @@ export type IntegritySummary = {
   last_run: CollectionRun | null;
 };
 
+export type IssueType = "missing" | "ohlc_invalid" | "non_positive" | "zero_volume" | "spike" | "stale";
+
+export type IntegrityIssue = {
+  id: number;
+  symbol: string;
+  date: string;
+  type: IssueType;
+  severity: "error" | "warning";
+  // 유형마다 다르다. spike: {change, prev_date}, ohlc_invalid·non_positive: {open, high, low, close}, stale: {lag_days}
+  detail: Record<string, string | number>;
+  detected_at: string;
+  resolved_at: string | null;
+  note: string;
+};
+
+export type IssueFilters = {
+  symbol?: string;
+  type?: string;
+  severity?: string;
+  resolved?: "true" | "false";
+};
+
 export type BacktestParams = {
   symbol: string;
   strategy: "ma_cross" | "buy_and_hold";
@@ -117,6 +139,14 @@ export async function getHealth(): Promise<Health | null> {
 
 export function getIntegritySummary() {
   return getJSON<IntegritySummary>("/api/integrity/summary/");
+}
+
+/** 무결성 이슈(최신 날짜순, 최대 100개)와 조건에 맞는 전체 개수. 빈 필터는 보내지 않는다. */
+export async function getIntegrityIssues(filters: IssueFilters) {
+  const query = new URLSearchParams(
+    Object.entries(filters).filter((entry): entry is [string, string] => Boolean(entry[1])),
+  );
+  return getJSON<{ count: number; results: IntegrityIssue[] }>(`/api/integrity/issues/?${query}`);
 }
 
 /** 한 종목의 일봉(날짜 오름차순). from이 없으면 상장일부터 전부(최대 5000개). */
