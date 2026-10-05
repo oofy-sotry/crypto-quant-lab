@@ -29,8 +29,10 @@ def compute_metrics(frame: pd.DataFrame) -> dict:
     sharpe = returns.mean() / std * math.sqrt(PERIODS_PER_YEAR) if std > 0 else 0.0
 
     # 진입(0→양수)할 때마다 거래 번호를 붙여 거래별 수익률을 구한다.
-    entries = (position > 0) & (position.shift(1, fill_value=0) == 0)
-    trade_id = entries.cumsum().where(position > 0)
+    # 판 날(포지션이 0이 된 첫날)도 그 거래에 넣는다. 그날 수익률에는 매도 수수료가 들어 있다.
+    held_before = position.shift(1, fill_value=0) > 0
+    entries = (position > 0) & ~held_before
+    trade_id = entries.cumsum().where((position > 0) | held_before)
     trade_returns = (1 + returns).groupby(trade_id).prod() - 1
     trades = int(entries.sum())
     win_rate = float((trade_returns > 0).mean()) if trades else 0.0
