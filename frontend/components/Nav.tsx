@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/", label: "홈", match: (p: string) => p === "/" },
   { href: "/assets/KRW-BTC", label: "가격 차트", match: (p: string) => p.startsWith("/assets") },
   { href: "/backtest", label: "백테스트", match: (p: string) => p.startsWith("/backtest") },
+  { href: "/integrity", label: "데이터 품질", match: (p: string) => p.startsWith("/integrity") },
 ];
 
 export function Nav() {
