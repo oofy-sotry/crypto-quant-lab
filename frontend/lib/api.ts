@@ -121,29 +121,35 @@ export class ApiError extends Error {
   }
 }
 
-async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { next: { revalidate: REVALIDATE_SECONDS } });
+// 시간 기반 캐시는 만료 뒤 첫 요청에 옛 값을 주고 뒤에서 갱신한다(stale-while-revalidate).
+// 운영 상태처럼 "지금" 값이 중요한 화면은 fresh=true로 캐시를 쓰지 않는다.
+function cacheOption(fresh: boolean, revalidate = REVALIDATE_SECONDS): RequestInit {
+  return fresh ? { cache: "no-store" } : { next: { revalidate } };
+}
+
+async function getJSON<T>(path: string, fresh = false): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, cacheOption(fresh));
   if (!res.ok) throw new ApiError(res.status, `${path} 응답 ${res.status}`);
   return res.json() as Promise<T>;
 }
 
 /** 서버 상태. 장애면 API가 503과 함께 같은 형식을 주므로 그대로 읽는다. 응답이 없으면 null. */
-export async function getHealth(): Promise<Health | null> {
+export async function getHealth(fresh = false): Promise<Health | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/health/`, { next: { revalidate: 60 } });
+    const res = await fetch(`${API_BASE}/api/health/`, cacheOption(fresh, 60));
     return (await res.json()) as Health;
   } catch {
     return null;
   }
 }
 
-export function getIntegritySummary() {
-  return getJSON<IntegritySummary>("/api/integrity/summary/");
+export function getIntegritySummary(fresh = false) {
+  return getJSON<IntegritySummary>("/api/integrity/summary/", fresh);
 }
 
 /** 수집 실행 기록(최신순, 최대 100개) */
-export async function getCollectionRuns() {
-  const page = await getJSON<{ results: CollectionRun[] }>("/api/collection-runs/");
+export async function getCollectionRuns(fresh = false) {
+  const page = await getJSON<{ results: CollectionRun[] }>("/api/collection-runs/", fresh);
   return page.results;
 }
 
