@@ -77,3 +77,15 @@ def test_load_close_rejects_insufficient_warmup(btc):
 def test_load_close_rejects_end_after_last_final_candle(btc):
     with pytest.raises(DataNotReady, match="확정된 일봉"):
         load_close(btc, start=date(2026, 1, 10), end=date(2026, 2, 5))
+
+
+@pytest.mark.django_db
+def test_load_close_ignores_stale_issue(btc):
+    # 수집 지연(stale)은 "새 데이터가 안 들어온다"는 뜻이지 이미 있는 데이터가 틀렸다는 뜻이 아니다.
+    # 지연 이슈는 마지막 확정 봉 날짜에 붙으므로, 막으면 Cron이 멈춘 동안
+    # 거의 모든 백테스트가 거부된다.
+    IntegrityIssue.objects.create(
+        asset=btc, date=date(2026, 1, 30), type="stale", severity="error", detail={"lag_days": 3}
+    )
+
+    assert len(load_close(btc, start=date(2026, 1, 10), end=date(2026, 1, 30))) == 22
