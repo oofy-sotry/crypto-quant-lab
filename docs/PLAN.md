@@ -129,7 +129,7 @@ BacktestRun    asset, params(JSON), params_hash, data_version, metrics(JSON),
 | GET | `/api/collection-runs/` | |
 | POST | `/api/backtests/` | 새로 계산 201 / 기존 결과 200 / 입력 오류 400 / 데이터 오류 422 / 분당 20회 초과 429 |
 | GET | `/api/backtests/{id}/` | |
-| POST | `/api/backtests/grid/` | (Could) 로컬에서는 Celery로 202 응답 |
+| POST | `/api/backtests/grid/` | (Could, 미구현) 로컬에서는 Celery로 202 응답 |
 | GET | `/api/cron/collect/` | `Authorization: Bearer $CRON_SECRET` 검증(비어 있으면 전부 거부), throttle 제외. 끝의 `/` 필수(Cron은 리다이렉트를 따라가지 않음) |
 | GET | `/api/schema/`, `/api/docs/` | OpenAPI 스키마, Swagger UI (drf-spectacular) |
 
