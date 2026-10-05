@@ -89,6 +89,7 @@ frontend/
 
 | 메서드 | 경로 | 설명 |
 |---|---|---|
+| GET | `/` | 대시보드로 302 이동 (`DASHBOARD_URL`이 없으면 404) |
 | GET | `/api/health/` | DB·Redis 연결 상태와 소요 시간 |
 | GET | `/api/assets/` | 종목 목록 |
 | GET | `/api/candles/?symbol=KRW-BTC&from=2025-01-01&to=2025-12-31` | 일봉 (페이지당 500개, 최대 5000) |
