@@ -62,6 +62,20 @@ export default async function Home() {
           <div className="font-semibold">가격 차트 →</div>
           <p className="mt-1 text-sm text-muted">상장일부터 전체 일봉과 이동평균선을 봅니다.</p>
         </Link>
+        <Link
+          href="/integrity"
+          className="rounded-xl border border-border bg-panel p-4 transition-colors hover:border-accent"
+        >
+          <div className="font-semibold">데이터 품질 →</div>
+          <p className="mt-1 text-sm text-muted">결측·급등락 같은 무결성 이슈와 해결 사유를 봅니다.</p>
+        </Link>
+        <Link
+          href="/status"
+          className="rounded-xl border border-border bg-panel p-4 transition-colors hover:border-accent"
+        >
+          <div className="font-semibold">운영 상태 →</div>
+          <p className="mt-1 text-sm text-muted">서버 상태와 매일 자동 수집(Cron) 기록을 봅니다.</p>
+        </Link>
       </section>
     </div>
   );
