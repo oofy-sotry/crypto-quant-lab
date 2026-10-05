@@ -1,16 +1,15 @@
 # crypto-quant-lab
 
-업비트 코인 일봉을 매일 수집하고, 데이터 무결성을 검사한 뒤, pandas로 전략을 백테스트해 REST API로 제공하는 프로젝트입니다.
+업비트 코인 일봉을 매일 수집하고, 데이터 무결성을 검사한 뒤, pandas로 전략을 백테스트해 REST API와 대시보드로 제공하는 프로젝트입니다.
 
 ```
-업비트 공개 API → 일봉 수집(매일 Cron) → 무결성 검사 → pandas 백테스트 → DRF API (+ Redis 캐시)
+업비트 공개 API → 일봉 수집(매일 Cron) → 무결성 검사 → pandas 백테스트 → DRF API (+ Redis 캐시) → Next.js 대시보드
 ```
 
-- **운영 API:** https://crypto-quant-lab-oofysotry.vercel.app/api/health/
+- **대시보드:** https://crypto-quant-dashboard-oofysotry.vercel.app (홈·가격 차트·백테스트)
+- **운영 API:** https://crypto-quant-lab-oofysotry.vercel.app/api/health/ (API 주소 `/`로 들어오면 대시보드로 이동)
 - **API 문서(Swagger):** https://crypto-quant-lab-oofysotry.vercel.app/api/docs/
 - 대상 종목: KRW-BTC, KRW-ETH, KRW-XRP, KRW-SOL, KRW-DOGE (상장일부터 약 13,700개 일봉)
-
-> 1차 README입니다. 대시보드(Next.js)는 아직 만드는 중입니다.
 
 ## 기술 스택
 
