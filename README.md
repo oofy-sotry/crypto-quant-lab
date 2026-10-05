@@ -11,6 +11,8 @@
 - **API 문서(Swagger):** https://crypto-quant-lab-oofysotry.vercel.app/api/docs/
 - 대상 종목: KRW-BTC, KRW-ETH, KRW-XRP, KRW-SOL, KRW-DOGE (상장일부터 약 13,700개 일봉)
 
+![대시보드 데모: 홈 → 가격 차트 → 백테스트 실행 → 데이터 품질 → 운영 상태](docs/demo.gif)
+
 ## 기술 스택
 
 | 구분 | 사용 기술 |
