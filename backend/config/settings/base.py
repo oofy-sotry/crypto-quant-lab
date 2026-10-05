@@ -112,7 +112,8 @@ CORS_URLS_REGEX = r"^/api/.*$"
 
 # API 서버 첫 화면(/)에서 보낼 대시보드 주소. 비어 있으면 /는 404.
 DASHBOARD_URL = env("DASHBOARD_URL", default="")
-# 수집 후 대시보드 캐시를 바로 갱신할 때 쓰는 비밀값(대시보드 REVALIDATE_SECRET과 같은 값). 비어 있으면 호출하지 않는다.
+# 수집 후 대시보드 캐시를 바로 갱신할 때 쓰는 비밀값(대시보드 REVALIDATE_SECRET과 같은 값).
+# 비어 있으면 호출하지 않는다.
 DASHBOARD_REVALIDATE_SECRET = env("DASHBOARD_REVALIDATE_SECRET", default="")
 
 SPECTACULAR_SETTINGS = {
