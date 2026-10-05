@@ -1,7 +1,10 @@
 import time
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
+from django.http import Http404
+from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
 from rest_framework.decorators import api_view, throttle_classes
@@ -50,3 +53,11 @@ def health(request):
         {"status": "ok" if healthy else "error", "checks": checks, "latency_ms": latency_ms},
         status=200 if healthy else 503,
     )
+
+
+# DRF 뷰가 아닌 일반 Django 뷰로 둔다. throttle(Redis)을 거치지 않아 첫 화면 이동이 가볍다.
+def root(request):
+    if not settings.DASHBOARD_URL:
+        raise Http404
+    # 대시보드 주소가 바뀔 수 있으니 브라우저가 기억하는 301 대신 302.
+    return redirect(settings.DASHBOARD_URL)
