@@ -40,8 +40,13 @@ def load_close(asset: Asset, start: date, end: date, warmup_days: int = 0) -> pd
         .order_by("date")
         .values_list("date", "close")
     )
-    if not rows or rows[0][0] > first_needed:
-        raise DataNotReady(f"{first_needed} 이후 데이터만 있어 워밍업 기간이 부족합니다.")
+    if not rows:
+        raise DataNotReady(f"{first_needed} ~ {end} 기간에 확정된 일봉이 없습니다.")
+    if rows[0][0] > first_needed:
+        raise DataNotReady(
+            f"데이터가 {rows[0][0]}부터 있는데, 이동평균 워밍업을 포함하면 {first_needed}부터"
+            " 필요합니다. 시작일을 늦춰 주세요."
+        )
     if rows[-1][0] < end:
         raise DataNotReady(f"{end}까지 확정된 일봉이 없습니다(마지막: {rows[-1][0]}).")
 
