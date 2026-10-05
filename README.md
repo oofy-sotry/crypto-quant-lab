@@ -184,6 +184,6 @@ ruff check . && ruff format --check .
 
 ## 다음 작업
 
-- Next.js 대시보드: 캔들·이동평균 차트, 백테스트 폼, 누적수익 곡선 vs Buy&Hold, 무결성 화면
+- 대시보드 남은 화면: 데이터 품질(`/integrity`), 운영 상태(`/status`, Cron·수집 기록)
 - CI에 MySQL + pytest
 - (선택) Celery로 파라미터 그리드 탐색, 다음 날 시가 체결 옵션
