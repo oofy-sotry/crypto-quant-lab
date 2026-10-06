@@ -31,7 +31,7 @@ flowchart LR
     user([사용자 브라우저])
     upbit[(업비트 공개 API)]
 
-    subgraph vercel_front [Vercel · 대시보드 프로젝트]
+    subgraph vercel_front [Vercel · 대시보드 프로젝트 · 싱가포르]
         next[Next.js 대시보드<br/>API 응답 5분 캐시]
         reval["POST /api/revalidate"]
     end
@@ -58,14 +58,14 @@ flowchart LR
 
 | 구분 | 로컬 | 운영 |
 |---|---|---|
-| 대시보드 | `next dev` | Vercel 별도 프로젝트 (Root Directory `frontend`) |
+| 대시보드 | `next dev` | Vercel 별도 프로젝트 (Root Directory `frontend`, 싱가포르 `sin1`) |
 | API | `manage.py runserver` | Vercel 서버리스 함수 (싱가포르 `sin1`) |
 | DB | MySQL 컨테이너 | Aiven MySQL (싱가포르, SSL) |
 | 캐시·요청 제한 | Redis 컨테이너 | Upstash Redis (싱가포르) |
 | 정기 수집 | `manage.py collect` | Vercel Cron → `GET /api/cron/collect/` (매일 KST 09시대. 무료 플랜이라 09:00~09:59 중 실행) |
 | 오류 모니터링 | 콘솔 로그 | Sentry |
 
-함수·DB·캐시를 모두 싱가포르에 둡니다. 처음에는 함수가 미국에서 돌아 응답이 4.2초 걸렸는데, 같은 리전으로 모아 0.46초로 줄였습니다.
+대시보드·API 함수와 DB·캐시를 모두 싱가포르에 둡니다. 처음에는 API 함수가 미국에서 돌아 응답이 4.2초 걸렸는데, 같은 리전으로 모아 0.46초로 줄였습니다. 나중에 만든 대시보드 프로젝트도 기본 리전이 미국이어서 같은 방식으로 옮겼습니다.
 
 ```
 backend/
