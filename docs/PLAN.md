@@ -140,7 +140,7 @@ BacktestRun    asset, params(JSON), params_hash, data_version, metrics(JSON),
 - 서버리스 환경의 커넥션 누수를 막기 위해 `CONN_MAX_AGE=0`
 - 정적 파일은 Vercel이 빌드 때 collectstatic 후 CDN으로 서빙(WhiteNoise는 로컬용)
 - 번들 크기·함수 실행 시간 제한은 D1에 확인
-- 함수·DB·캐시는 같은 리전(싱가포르)에 둔다. 함수 리전은 `backend/vercel.json`의 `regions`로 고정
+- 함수·DB·캐시는 같은 리전(싱가포르)에 둔다. 함수 리전은 `backend/vercel.json`·`frontend/vercel.json`의 `regions`로 고정(Vercel 프로젝트마다 따로 정해지므로 둘 다 필요)
 - Cron `30 0 * * *`(UTC, KST 09:30). Hobby 플랜은 지정한 시간대 안 아무 때나 실행되므로 실제로는 KST 09:00~09:59. 일봉 마감(09:00) 이후라 문제없다. production 배포에서만 실행된다.
 - 백필은 Cron이 아니라 로컬 `manage.py collect --all`로 운영 DB에 직접 실행한다. 정기 수집은 `collect`(최근 7일)와 같은 함수를 쓴다.
 
