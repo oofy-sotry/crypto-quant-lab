@@ -212,6 +212,7 @@ ruff check . && ruff format --check .
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | 운영 API 응답 4.2초 | 함수는 미국, DB는 싱가포르에 있었습니다. 함수를 옮긴 뒤에도 2초가 걸려 `/api/health/`에 의존 서비스별 소요 시간을 넣어 보니 DB 30ms, Redis 1.5초였습니다. Redis 쓰기가 다른 대륙의 primary로 가고 있었습니다 | 함수·DB·Redis를 모두 싱가포르로 → 0.46초 |
+| 캐시 없는 대시보드 화면이 매번 0.85초 (운영 며칠 뒤 점검에서 발견) | API 프로젝트만 리전을 고정해서, 나중에 만든 대시보드 프로젝트는 기본 리전(미국)이었습니다. 응답 헤더 `x-vercel-id`가 `icn1::iad1`이었습니다 | `frontend/vercel.json`에도 `sin1` 고정 → 0.44초 |
 | 새벽에 진행 중인 봉이 마감된 봉으로 저장됨 | "오늘"을 KST 달력 날짜로 구했는데, 업비트 일봉은 KST 자정이 아니라 **09:00(UTC 00:00)**에 바뀝니다 | 진행 중인 봉 날짜를 UTC 날짜로 계산, 08:59·09:00 경계 테스트 추가 |
 | `Authorization: Bearer é` 헤더 하나로 Cron API 500 | `hmac.compare_digest`는 ASCII가 아닌 str에 `TypeError`를 냅니다. 공개 URL이라 누구나 Sentry 오류를 쌓을 수 있었습니다 | bytes로 바꿔 비교, 실패하는 테스트로 먼저 재현 |
 | 운영 API 전체 500 (health: DB `OperationalError`) | Aiven 무료 플랜이 "사용하지 않는 서비스"로 판단해 DB를 자동으로 껐습니다. 증상 → health(서비스별 상태) → 직접 접속(DNS 실패) → Aiven 이벤트 로그 순서로 찾았습니다 | API로 다시 켬. 데이터는 업비트에서 다시 받을 수 있어 이전 비용이 낮다는 점도 확인 |
