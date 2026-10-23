@@ -181,3 +181,19 @@ class UpbitClient:
             if len(page) < MAX_COUNT:
                 return
             to = page[-1].date  # 가장 오래된 날짜 이전부터 다음 페이지 (to는 해당 날짜 제외)
+
+    def iter_minute_candles(self, market: str, since: datetime, to: datetime | None = None):
+        """to 이전(없으면 최신) 1분봉부터 since까지 과거로 거슬러 올라가며 하나씩 돌려준다.
+
+        since는 포함, to는 제외. 진행 중인 분을 빼려면 to에 현재 분의 시작 시각을 넘긴다.
+        응답이 200개보다 적으면(상장 시점에 도달) 멈춘다.
+        """
+        while True:
+            page = self.fetch_minute_candles(market, MAX_COUNT, to)
+            for bar in page:
+                if bar.ts < since:
+                    return
+                yield bar
+            if len(page) < MAX_COUNT:
+                return
+            to = page[-1].ts
