@@ -72,6 +72,49 @@ class MinuteCandle(models.Model):
         return f"{self.asset} {self.ts:%Y-%m-%d %H:%M}"
 
 
+class AggBar(models.Model):
+    """분봉을 묶은 집계 봉의 공통 컬럼. 값은 market/aggregates.py가 DB 쿼리로 채운다."""
+
+    # unique(asset_id, bucket) 인덱스가 asset_id 조회도 맡으므로 외래키 단독 인덱스는 끈다
+    # (MinuteCandle과 같은 이유).
+    asset = models.ForeignKey(
+        Asset, on_delete=models.CASCADE, related_name="%(class)ss", db_index=False
+    )
+    bucket = models.DateTimeField()  # 구간 시작 시각(UTC)
+    open = models.DecimalField(**DailyCandle.PRICE)
+    high = models.DecimalField(**DailyCandle.PRICE)
+    low = models.DecimalField(**DailyCandle.PRICE)
+    close = models.DecimalField(**DailyCandle.PRICE)
+    volume = models.DecimalField(**DailyCandle.AMOUNT)
+    value = models.DecimalField(**DailyCandle.AMOUNT)
+    vwap = models.DecimalField(**DailyCandle.PRICE, null=True)  # 거래대금 / 거래량
+    # 구간 안 1분 로그수익률의 표본 표준편차(연율화 안 함). 수익률이 2개 미만이면 NULL.
+    # 돈이 아니라 통계값이라 float로 둔다.
+    volatility = models.FloatField(null=True)
+    minute_count = models.PositiveIntegerField()  # 원본 분봉 수 (거래 없는 분은 빠져 있음)
+    # 집계 계산 방식이 바뀌면 올린다. 옛 버전으로 남은 행을 찾아 다시 집계할 수 있다.
+    agg_version = models.PositiveSmallIntegerField()
+    aggregated_at = models.DateTimeField()
+
+    class Meta:
+        abstract = True
+        ordering = ["asset_id", "bucket"]
+        constraints = [
+            models.UniqueConstraint(fields=["asset", "bucket"], name="uniq_%(class)s_asset_bucket"),
+        ]
+
+    def __str__(self):
+        return f"{self.asset} {self.bucket:%Y-%m-%d %H:%M}"
+
+
+class HourlyBar(AggBar):
+    """1시간 집계 봉."""
+
+
+class DailyAgg(AggBar):
+    """분봉으로 만든 일봉(UTC 00:00 시작 = 업비트 일봉 경계). 업비트 일봉과 대조하는 데 쓴다."""
+
+
 class CollectionRun(models.Model):
     class Trigger(models.TextChoices):
         CRON = "cron", "Vercel Cron"
