@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:16
+    # 운영(Neon)과 같은 메이저 버전. 테스트·EXPLAIN 측정이 운영과 같은 플래너에서 돌게 한다.
+    image: postgres:18
     # POSTGRES_USER로 만든 사용자는 슈퍼유저라 Django 테스트 러너가 test_ DB를 만들고 지울 수 있다.
     environment:
       POSTGRES_DB: ${DB_NAME:-cryptoquant}
@@ -9,7 +10,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # 18 이미지부터 데이터가 /var/lib/postgresql/18/docker에 생긴다. 상위 폴더를 마운트해야
+      # 메이저 업그레이드(pg_upgrade) 때 버전별 폴더를 나란히 둘 수 있다.
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${DB_USER:-cryptoquant}", "-d", "${DB_NAME:-cryptoquant}"]
       interval: 5s
