@@ -19,10 +19,10 @@
 |---|---|
 | 백엔드 | Python 3.12, Django 5.2, Django REST Framework, drf-spectacular |
 | 데이터·계산 | pandas, numpy, Decimal |
-| DB·캐시 | MySQL 8 (운영: Aiven), Redis (운영: Upstash) |
+| DB·캐시 | PostgreSQL 18 (운영: Neon), Redis (운영: Upstash) — v1은 MySQL 8(Aiven), 태그 `v1-mysql` |
 | 프론트엔드 | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, lightweight-charts |
 | 배포·운영 | Vercel (서버리스 함수 + Cron, 대시보드는 별도 프로젝트), Sentry |
-| 품질 | pytest (테스트 113개), ruff, ESLint, GitHub Actions (lint + MySQL·Redis 컨테이너로 pytest) |
+| 품질 | pytest (테스트 113개), ruff, ESLint, GitHub Actions (lint + PostgreSQL·Redis 컨테이너로 pytest) |
 
 ## 아키텍처
 
