@@ -41,7 +41,7 @@ flowchart LR
         api[Django REST API<br/>수집 · 무결성 검사<br/>백테스트]
     end
 
-    mysql[(Aiven MySQL<br/>일봉 · 이슈 · 결과)]
+    db[(Neon PostgreSQL<br/>일봉 · 이슈 · 결과)]
     redis[(Upstash Redis<br/>백테스트 캐시<br/>요청 제한)]
     sentry[Sentry]
 
@@ -50,7 +50,7 @@ flowchart LR
     user -- 백테스트 실행<br/>CORS · IP별 요청 제한 --> api
     cron -- Bearer 비밀값 --> api
     api -- 최근 7일 일봉 --> upbit
-    api --> mysql
+    api -- 커넥션 풀러 --> db
     api --> redis
     api -- 수집 후 캐시 즉시 만료 --> reval
     api -. 처리 안 된 예외 .-> sentry
@@ -60,7 +60,7 @@ flowchart LR
 |---|---|---|
 | 대시보드 | `next dev` | Vercel 별도 프로젝트 (Root Directory `frontend`, 싱가포르 `sin1`) |
 | API | `manage.py runserver` | Vercel 서버리스 함수 (싱가포르 `sin1`) |
-| DB | MySQL 컨테이너 | Aiven MySQL (싱가포르, SSL) |
+| DB | PostgreSQL 18 컨테이너 | Neon PostgreSQL 18 (싱가포르, PgBouncer 풀러, SSL) |
 | 캐시·요청 제한 | Redis 컨테이너 | Upstash Redis (싱가포르) |
 | 정기 수집 | `manage.py collect` | Vercel Cron → `GET /api/cron/collect/` (매일 KST 09시대. 무료 플랜이라 09:00~09:59 중 실행) |
 | 오류 모니터링 | 콘솔 로그 | Sentry |
