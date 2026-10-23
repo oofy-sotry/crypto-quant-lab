@@ -44,6 +44,34 @@ class DailyCandle(models.Model):
         return f"{self.asset} {self.date}"
 
 
+class MinuteCandle(models.Model):
+    """업비트 1분봉. 거래가 없는 분은 업비트가 주지 않으므로 빈 분이 정상적으로 있다."""
+
+    # 외래키 기본 인덱스(asset_id 단독)는 끈다. unique(asset_id, ts) 인덱스의 첫 컬럼이 asset_id라
+    # asset_id 조건 조회에도 그대로 쓰인다. 수백만 행에서 중복 인덱스는 용량과 INSERT 비용만 늘린다.
+    asset = models.ForeignKey(
+        Asset, on_delete=models.CASCADE, related_name="minute_candles", db_index=False
+    )
+    # 분 시작 시각(UTC). UTC로 두면 date_trunc('day', ts)가 일봉 경계(UTC 00:00)와 맞는다.
+    ts = models.DateTimeField()
+    open = models.DecimalField(**DailyCandle.PRICE)
+    high = models.DecimalField(**DailyCandle.PRICE)
+    low = models.DecimalField(**DailyCandle.PRICE)
+    close = models.DecimalField(**DailyCandle.PRICE)
+    volume = models.DecimalField(**DailyCandle.AMOUNT)
+    value = models.DecimalField(**DailyCandle.AMOUNT)
+
+    class Meta:
+        ordering = ["asset_id", "ts"]
+        # 다른 인덱스는 쿼리별로 측정하면서 추가한다(ROADMAP D5).
+        constraints = [
+            models.UniqueConstraint(fields=["asset", "ts"], name="uniq_minute_asset_ts"),
+        ]
+
+    def __str__(self):
+        return f"{self.asset} {self.ts:%Y-%m-%d %H:%M}"
+
+
 class CollectionRun(models.Model):
     class Trigger(models.TextChoices):
         CRON = "cron", "Vercel Cron"
