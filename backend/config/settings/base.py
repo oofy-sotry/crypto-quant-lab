@@ -65,6 +65,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {"default": env.db("DATABASE_URL")}
 # 서버리스에서는 요청마다 인스턴스가 바뀔 수 있어 기본값은 커넥션을 재사용하지 않는다.
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("CONN_MAX_AGE", default=0)
+# PgBouncer 트랜잭션 모드(Neon pooler)에서는 트랜잭션이 끝나면 다른 서버 연결로 바뀔 수 있어
+# 서버 쪽 커서(DECLARE CURSOR, QuerySet.iterator())가 깨진다. 풀러를 쓰는 운영에서 켠다.
+DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = env.bool(
+    "DISABLE_SERVER_SIDE_CURSORS", default=False
+)
 
 CACHES = {
     "default": {
