@@ -149,6 +149,22 @@ class UpbitClient:
         rows = json.loads(response.text, parse_float=Decimal)
         return [parse_candle(row) for row in rows]
 
+    def fetch_minute_candles(
+        self, market: str, count: int = MAX_COUNT, to: datetime | None = None
+    ) -> list[MinuteBar]:
+        """1분봉을 최신순으로 최대 count개 가져온다.
+
+        to(aware datetime)를 주면 그 시각 '이전' 분봉만 가져온다(해당 분은 제외).
+        거래가 없던 분은 응답에 없어서, 200개가 200분보다 긴 구간에 걸칠 수 있다.
+        """
+        params = {"market": market, "count": count}
+        if to is not None:
+            params["to"] = to.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        response = self._get("/candles/minutes/1", params)
+        rows = json.loads(response.text, parse_float=Decimal)
+        return [parse_minute_candle(row) for row in rows]
+
     def iter_daily_candles(self, market: str, since: date | None = None):
         """최신 일봉부터 과거로 거슬러 올라가며 하나씩 돌려준다.
 
