@@ -66,7 +66,7 @@
 
 | 위치 | 분봉 | 용도 |
 |---|---|---|
-| 로컬 Docker PostgreSQL 16 | 5종목 × 1년 (약 263만 행) | 대용량 적재·집계·튜닝 측정 |
+| 로컬 Docker PostgreSQL 18 | 5종목 × 1년 (약 263만 행) | 대용량 적재·집계·튜닝 측정 |
 | 운영 (Neon) | 최근 30일 (약 21.6만 행, 약 60MB) + 집계 결과 | 서비스 |
 
 README에 "측정은 로컬, 데이터 규모 N건"을 명시한다. 1년치를 운영에 올리면 0.5GB를 넘을 수 있으므로 올리지 않는다.
@@ -91,15 +91,15 @@ README에 "측정은 로컬, 데이터 규모 N건"을 명시한다. 1년치를 
 
 ### D1 — PostgreSQL 전환 (로컬·CI·운영)
 
-- [ ] `git tag v1-mysql` 후 push
-- [ ] docker compose: `mysql` → `postgres:16`, `docker/mysql/init` 삭제
-- [ ] 의존성 `PyMySQL` → `psycopg[binary]`, `config/__init__.py`의 PyMySQL 코드 제거
-- [ ] `base.py` charset 옵션 제거, `prod.py` SSL 처리를 `sslmode`로 교체
-- [ ] CI 서비스 컨테이너를 postgres로 교체
-- [ ] 기존 테스트 113개 통과 확인. MySQL과 다르게 동작한 곳은 트러블슈팅에 기록
-- [ ] Neon 설치(`vercel integration add neon`, 싱가포르 리전)
-- [ ] 운영 전환: MySQL `dumpdata` → Neon `migrate` + `loaddata` + 시퀀스 재설정 → `DATABASE_URL` 교체 → health·Cron·대시보드 확인
-- [ ] Aiven MySQL은 1주일 동안 되돌리기용으로 두고 그 뒤 정리
+- [x] `git tag v1-mysql` 후 push
+- [x] docker compose: `mysql` → `postgres:18`(운영 Neon과 같은 메이저 버전), `docker/mysql/init` 삭제
+- [x] 의존성 `PyMySQL` → `psycopg[binary]`, `config/__init__.py`의 PyMySQL 코드 제거
+- [x] `base.py` charset 옵션 제거, `prod.py` SSL 처리를 `sslmode`로 교체, `DISABLE_SERVER_SIDE_CURSORS` 추가
+- [x] CI 서비스 컨테이너를 postgres로 교체
+- [x] 기존 테스트 113개 통과 확인. MySQL과 다르게 동작한 곳은 트러블슈팅에 기록 (테스트 수정 0건)
+- [x] Neon 설치(`vercel integration add neon`, 싱가포르 리전, 무료 플랜, 카드 등록 없음)
+- [x] 운영 전환: MySQL `dumpdata` → Neon `migrate` + 적재(`loaddata`가 느려 `bulk_create` 배치로 대체) + 시퀀스 재설정 → `DATABASE_URL` 교체 → health·Cron·대시보드 확인
+- [ ] Aiven MySQL은 1주일 동안 되돌리기용으로 두고 그 뒤 정리 (2026-10-30 이후, `DB_SSL_CA` 환경변수도 함께)
 
 **완료 기준:** CI 녹색, 운영이 PostgreSQL에서 동작, 테이블별 행 수가 전환 전과 같음
 
@@ -227,7 +227,7 @@ README에 "측정은 로컬, 데이터 규모 N건"을 명시한다. 1년치를 
 
 | 단계 | 상태 | 비고 |
 |---|---|---|
-| 1단계 D1 PostgreSQL 전환 | 대기 | |
+| 1단계 D1 PostgreSQL 전환 | 완료 (10/23) | 테스트 113개 수정 없이 통과, 운영 13,913객체 이전·전수 비교 일치, Aiven 정리만 남음 |
 | 1단계 D2 분봉 수집 | 대기 | |
 | 1단계 D3 집계·정합성 | 대기 | |
 | 1단계 D4 재처리 | 대기 | |
