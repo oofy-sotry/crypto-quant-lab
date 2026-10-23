@@ -146,7 +146,7 @@ curl -X POST https://crypto-quant-lab-oofysotry.vercel.app/api/backtests/ \
 필요한 것: Python 3.12, Docker
 
 ```bash
-# 1. MySQL·Redis 실행
+# 1. PostgreSQL·Redis 실행
 docker compose up -d
 
 # 2. 가상환경과 패키지
@@ -183,7 +183,7 @@ API 서버의 CORS 기본값이 `http://localhost:3000`이라 따로 설정할 �
 
 ```bash
 cd backend
-pytest          # 113개, MySQL·Redis 컨테이너가 떠 있어야 함
+pytest          # 113개, PostgreSQL·Redis 컨테이너가 떠 있어야 함
 ruff check . && ruff format --check .
 ```
 
