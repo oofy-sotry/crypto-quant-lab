@@ -1,19 +1,17 @@
 services:
-  mysql:
-    image: mysql:8.4
+  postgres:
+    image: postgres:16
+    # POSTGRES_USER로 만든 사용자는 슈퍼유저라 Django 테스트 러너가 test_ DB를 만들고 지울 수 있다.
     environment:
-      MYSQL_DATABASE: ${DB_NAME:-cryptoquant}
-      MYSQL_USER: ${DB_USER:-cryptoquant}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-cryptoquant}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      POSTGRES_DB: ${DB_NAME:-cryptoquant}
+      POSTGRES_USER: ${DB_USER:-cryptoquant}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cryptoquant}
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql-data:/var/lib/mysql
-      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-cryptoquant}", "-d", "${DB_NAME:-cryptoquant}"]
       interval: 5s
       retries: 10
 
@@ -27,4 +25,4 @@ services:
       retries: 10
 
 volumes:
-  mysql-data:
+  postgres-data:
