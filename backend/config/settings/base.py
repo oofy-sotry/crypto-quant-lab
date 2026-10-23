@@ -60,9 +60,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# DATABASE_URL 예: mysql://user:password@host:3306/dbname
+# DATABASE_URL 예: postgres://user:password@host:5432/dbname?sslmode=require
+# 주소 뒤 쿼리 문자열(sslmode 등)은 django-environ이 OPTIONS로 넘겨 psycopg 접속 옵션이 된다.
 DATABASES = {"default": env.db("DATABASE_URL")}
-DATABASES["default"]["OPTIONS"] = {"charset": "utf8mb4"}
 # 서버리스에서는 요청마다 인스턴스가 바뀔 수 있어 기본값은 커넥션을 재사용하지 않는다.
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("CONN_MAX_AGE", default=0)
 
