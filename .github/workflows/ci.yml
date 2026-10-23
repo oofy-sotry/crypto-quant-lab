@@ -29,7 +29,7 @@ jobs:
     # unique 제약·upsert·타임존 같은 DB 동작까지 검증된다(SQLite로 바꾸면 놓친다).
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_DB: cryptoquant
           POSTGRES_USER: cryptoquant
