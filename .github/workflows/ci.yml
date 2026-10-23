@@ -25,18 +25,19 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    # 로컬 docker compose와 같은 MySQL·Redis를 띄운다. 테스트는 진짜 MySQL에서 돌아야
+    # 로컬 docker compose와 같은 PostgreSQL·Redis를 띄운다. 테스트는 진짜 PostgreSQL에서 돌아야
     # unique 제약·upsert·타임존 같은 DB 동작까지 검증된다(SQLite로 바꾸면 놓친다).
     services:
-      mysql:
-        image: mysql:8.4
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: cryptoquant
+          POSTGRES_DB: cryptoquant
+          POSTGRES_USER: cryptoquant
+          POSTGRES_PASSWORD: cryptoquant
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-cmd "pg_isready -U cryptoquant -d cryptoquant"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -51,8 +52,8 @@ jobs:
           --health-retries 10
     env:
       SECRET_KEY: ci-only-not-secret
-      # 서비스 컨테이너엔 초기화 SQL을 넣을 수 없어서, test_ DB를 만들 권한이 있는 root로 접속한다.
-      DATABASE_URL: mysql://root:root@127.0.0.1:3306/cryptoquant
+      # POSTGRES_USER로 만든 사용자는 슈퍼유저라 test_ DB를 만들 수 있다(MySQL 때의 root 접속이 필요 없음).
+      DATABASE_URL: postgres://cryptoquant:cryptoquant@127.0.0.1:5432/cryptoquant
       REDIS_URL: redis://127.0.0.1:6379/0
     steps:
       - uses: actions/checkout@v7
