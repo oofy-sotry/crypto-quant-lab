@@ -31,6 +31,17 @@ class Candle:
     value: Decimal
 
 
+@dataclass(frozen=True)
+class MinuteBar:
+    ts: datetime  # 분 시작 시각(UTC, aware)
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal
+    value: Decimal
+
+
 def current_trading_day(now: datetime | None = None) -> date:
     """지금 진행 중인(아직 마감 안 된) 업비트 일봉의 날짜.
 
@@ -48,6 +59,19 @@ def parse_candle(raw: dict) -> Candle:
     """
     return Candle(
         date=datetime.fromisoformat(raw["candle_date_time_kst"]).date(),
+        open=Decimal(raw["opening_price"]),
+        high=Decimal(raw["high_price"]),
+        low=Decimal(raw["low_price"]),
+        close=Decimal(raw["trade_price"]),
+        volume=Decimal(raw["candle_acc_trade_volume"]),
+        value=Decimal(raw["candle_acc_trade_price"]),
+    )
+
+
+def parse_minute_candle(raw: dict) -> MinuteBar:
+    """업비트 분봉 응답 한 건을 MinuteBar로 바꾼다. 시각은 KST가 아니라 UTC 필드를 쓴다."""
+    return MinuteBar(
+        ts=datetime.fromisoformat(raw["candle_date_time_utc"]).replace(tzinfo=UTC),
         open=Decimal(raw["opening_price"]),
         high=Decimal(raw["high_price"]),
         low=Decimal(raw["low_price"]),
