@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Min
 from django.utils import timezone
 
-from market.aggregates import MODELS, aggregate_minutes
+from market.aggregates import MODELS, aggregate_minutes, delete_orphan_aggregates
 from market.integrity import run_minute_checks
 from market.models import Asset
 
@@ -52,9 +52,11 @@ class Command(BaseCommand):
             for unit in MODELS:
                 started = time.monotonic()
                 changed = aggregate_minutes(asset, unit, start, end)
+                # 분봉이 사라진 구간의 옛 집계도 지워 재처리(reprocess)와 같은 결과를 만든다.
+                deleted = len(delete_orphan_aggregates(asset, unit, start, end))
                 self.stdout.write(
                     f"[{asset.symbol}] {unit} {start:%Y-%m-%d}~{end - timedelta(days=1):%Y-%m-%d}"
-                    f" 바뀐 행 {changed:,}, {time.monotonic() - started:.1f}초"
+                    f" 바뀐 행 {changed:,}, 삭제 {deleted:,}, {time.monotonic() - started:.1f}초"
                 )
 
         if not starts:

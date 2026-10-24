@@ -41,7 +41,7 @@ def test_aggregate_minutes_command_skips_today_and_old_days(btc):
 
     assert list(DailyAgg.objects.values_list("bucket", flat=True)) == [TODAY - timedelta(days=1)]
     assert list(HourlyBar.objects.values_list("bucket", flat=True)) == [TODAY - timedelta(hours=1)]
-    assert "[KRW-BTC] day 2026-10-21~2026-10-22 바뀐 행 1" in out
+    assert "[KRW-BTC] day 2026-10-21~2026-10-22 바뀐 행 1, 삭제 0" in out
 
 
 @pytest.mark.django_db
@@ -89,3 +89,17 @@ def test_aggregate_minutes_command_runs_minute_checks_for_all_assets(btc):
     ]
     assert "[KRW-BTC] 분봉 검사 2026-10-22~2026-10-22: 새 이슈 0" in out
     assert "[KRW-ETH] 분봉 검사 2026-10-22~2026-10-22: 새 이슈 1" in out
+
+
+@pytest.mark.django_db
+def test_aggregate_minutes_command_removes_aggregates_without_minutes(btc):
+    yesterday = TODAY - timedelta(days=1)
+    add_minute(btc, yesterday + timedelta(hours=3))
+    run("--asset", "KRW-BTC")
+    MinuteCandle.objects.filter(asset=btc).delete()
+
+    out = run("--asset", "KRW-BTC")
+
+    assert not DailyAgg.objects.filter(asset=btc).exists()
+    assert not HourlyBar.objects.filter(asset=btc).exists()
+    assert "day 2026-10-21~2026-10-22 바뀐 행 0, 삭제 1" in out
