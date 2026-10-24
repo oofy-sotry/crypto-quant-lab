@@ -3,14 +3,15 @@ import hmac
 from django.conf import settings
 from django.db.models import Count, Max, Min, Q
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from market.dashboard import revalidate_dashboard
-from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue
+from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue, ReprocessRun
+from market.reprocess import run_reprocess
 from market.serializers import (
     AssetSerializer,
     CandleQuerySerializer,
@@ -18,6 +19,8 @@ from market.serializers import (
     CollectionRunSerializer,
     IntegrityIssueSerializer,
     IntegritySummarySerializer,
+    ReprocessRequestSerializer,
+    ReprocessRunSerializer,
 )
 from market.services import collect_candles
 
@@ -180,3 +183,56 @@ class CronCollectView(APIView):
             # 새 데이터가 들어왔으니 대시보드가 이전 캐시를 보여 주지 않게 바로 갱신시킨다.
             revalidate_dashboard()
         return Response(CollectionRunSerializer(run).data, status=500 if failed else 200)
+
+
+class ReprocessView(APIView):
+    """재처리 실행. 기본은 dry-run(바뀔 내용만 계산하고 롤백), `"dry_run": false`면 반영.
+
+    `Authorization: Bearer <ADMIN_API_TOKEN>` 헤더가 맞아야 실행된다.
+    같은 종목·기간(하루라도 겹침)이 실행 중이면 409, 실행 중 오류면 500(전부 롤백됨).
+    결과(거부·실패 포함)는 항상 이력으로 남고 응답 본문으로 돌려준다.
+    """
+
+    # 사용자 세션이 아니라 관리자 토큰 하나로만 판단한다(세션 인증이 없으니 CSRF도 해당 없음).
+    authentication_classes = []
+    permission_classes = []
+
+    STATUS_CODES = {
+        ReprocessRun.Status.SUCCESS: 201,
+        ReprocessRun.Status.REJECTED: 409,
+        ReprocessRun.Status.FAILED: 500,
+    }
+
+    @extend_schema(
+        request=ReprocessRequestSerializer,
+        responses={
+            201: ReprocessRunSerializer,
+            400: OpenApiResponse(description="입력 오류(기간·상한·필수 값)"),
+            401: OpenApiResponse(description="관리자 토큰 불일치"),
+            409: ReprocessRunSerializer,
+            500: ReprocessRunSerializer,
+        },
+    )
+    def post(self, request):
+        if not bearer_matches(request, settings.ADMIN_API_TOKEN):
+            return Response({"detail": "인증 실패"}, status=401)
+        serializer = ReprocessRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        run = run_reprocess(
+            data["asset"],
+            data["target"],
+            data["start"],
+            data["end"],
+            dry_run=data["dry_run"],
+            reason=data["reason"],
+            requested_by=data["requested_by"],
+        )
+        return Response(ReprocessRunSerializer(run).data, status=self.STATUS_CODES[run.status])
+
+
+class ReprocessDetailView(generics.RetrieveAPIView):
+    """재처리 이력 하나. 운영 콘솔에서 누가 왜 무엇을 바꿨는지 보여 주려고 공개로 둔다."""
+
+    queryset = ReprocessRun.objects.select_related("asset")
+    serializer_class = ReprocessRunSerializer
