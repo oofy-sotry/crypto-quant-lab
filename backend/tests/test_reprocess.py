@@ -338,3 +338,18 @@ def test_run_reprocess_rejects_while_same_period_is_running(btc):
     assert record.status == ReprocessRun.Status.REJECTED
     assert record.changed_rows is None
     assert ReprocessRun.objects.get().status == ReprocessRun.Status.REJECTED  # 거부도 기록
+
+
+@pytest.mark.django_db
+def test_reprocess_daily_delete_only_bumps_data_version(btc):
+    # 남은 행의 수집 시각은 그대로라 Max(collected_at)만으로는 바뀐 걸 모른다.
+    days = [DAY - timedelta(days=i) for i in range(3)]
+    upsert_candles(btc, [candle(d) for d in days], today=DAY + timedelta(days=1))
+    version = data_version(btc)
+
+    result = reprocess_daily(
+        btc, days[-1], DAY, client=FakeDailyClient([candle(DAY), candle(days[2])])
+    )
+
+    assert result.diff["dailycandle"]["deleted"] == 1
+    assert data_version(btc) != version

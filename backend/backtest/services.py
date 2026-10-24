@@ -7,7 +7,7 @@ from datetime import date
 import pandas as pd
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import Max
+from django.db.models import Count, Max
 
 from backtest.data import load_close
 from backtest.engine import simulate
@@ -50,9 +50,14 @@ def params_hash(params: dict) -> str:
 
 
 def data_version(asset: Asset) -> str:
-    """종목 일봉이 마지막으로 수집·갱신된 시각. 수집이 일어나면 바뀐다."""
-    latest = asset.candles.aggregate(v=Max("collected_at"))["v"]
-    return latest.isoformat() if latest else "empty"
+    """종목 일봉의 버전: 마지막 수집·갱신 시각 + 행 수. 일봉이 바뀌면 이 값도 바뀐다.
+
+    수집 시각만 쓰면 일봉이 삭제되기만 했을 때(재처리가 원본에 없는 날을 지움) 남은 행의
+    시각이 그대로라 버전이 안 바뀌어 옛 백테스트 결과가 캐시에서 나간다. 그래서 행 수를 붙인다.
+    길이: 시각 32자 + ":" + 행 수 → BacktestRun.data_version(40자) 안에 들어간다.
+    """
+    v = asset.candles.aggregate(latest=Max("collected_at"), count=Count("id"))
+    return f"{v['latest'].isoformat()}:{v['count']}" if v["latest"] else "empty"
 
 
 def compute_backtest(asset: Asset, params: dict) -> dict:
