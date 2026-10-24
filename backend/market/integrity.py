@@ -6,7 +6,7 @@ DB 저장은 run_integrity_checks가 맡는다. 그래서 검사 규칙을 DB �
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
@@ -132,6 +132,49 @@ def find_minute_mismatches(
         severity = Severity.ERROR if price_differs else Severity.WARNING
         detail = {f: {"minute": str(m), "daily": str(c)} for f, (m, c) in diffs.items()}
         findings.append(Finding(day, Type.MINUTE_MISMATCH, severity, detail))
+    return findings
+
+
+Gap = tuple[datetime, datetime]  # [시작, 끝) 동안 분봉이 하나도 없음
+# 1년치에서 점검일이 아닌 날의 최장 빈 구간은 DOGE 15분, 나머지는 8분 이하였고
+# 30분 이상은 거래소 점검(전 종목 동시)뿐이었다.
+MIN_GAP = timedelta(minutes=30)
+
+
+def find_minute_gaps(
+    gaps: Iterable[Gap], peer_gaps: list[list[Gap]], min_gap: timedelta = MIN_GAP
+) -> list[Finding]:
+    """한 종목의 빈 구간 중 min_gap 이상인 것을 그 구간이 걸친 UTC 날짜마다 warning으로 남긴다.
+
+    거래가 없는 분은 업비트가 분봉을 주지 않아서 짧은 빈 구간은 정상이다. 긴 빈 구간은 거래소
+    점검이거나 수집 누락이다. peer_gaps(다른 종목들의 빈 구간)가 모두 이 구간과 겹치면
+    전 종목이 같이 빈 것이라 detail에 all_assets=True로 표시한다(거래소 점검 추정).
+    한 날에 긴 빈 구간이 여럿이면 가장 긴 것을 남기고 개수를 함께 적는다.
+    """
+    by_day: dict[date, list[Gap]] = {}
+    for start, end in gaps:
+        if end - start < min_gap:
+            continue
+        day = start.astimezone(UTC).date()
+        last_day = (end - timedelta(microseconds=1)).astimezone(UTC).date()
+        while day <= last_day:  # 자정을 넘는 빈 구간은 양쪽 날 모두에 남긴다
+            by_day.setdefault(day, []).append((start, end))
+            day += timedelta(days=1)
+
+    findings = []
+    for day, day_gaps in sorted(by_day.items()):
+        start, end = max(day_gaps, key=lambda g: g[1] - g[0])
+        shared = bool(peer_gaps) and all(
+            any(p_start < end and start < p_end for p_start, p_end in peer) for peer in peer_gaps
+        )
+        detail = {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "minutes": int((end - start) / timedelta(minutes=1)),
+            "count": len(day_gaps),
+            "all_assets": shared,
+        }
+        findings.append(Finding(day, Type.MINUTE_GAP, Severity.WARNING, detail))
     return findings
 
 

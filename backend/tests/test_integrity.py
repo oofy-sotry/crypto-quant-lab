@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from market.integrity import (
     check_candle_values,
+    find_minute_gaps,
     find_minute_mismatches,
     find_missing_dates,
     find_spikes,
@@ -148,3 +149,65 @@ def test_find_minute_mismatches_amount_only_is_warning_beyond_tolerance():
 
 def test_find_minute_mismatches_skips_days_missing_on_either_side():
     assert find_minute_mismatches([agg(1, c="1")], [daily(2, c="1")]) == []
+
+
+def at(day, hour, minute=0):
+    return datetime(2026, 10, day, hour, minute, tzinfo=UTC)
+
+
+def test_find_minute_gaps_ignores_short_gaps():
+    gaps = [(at(1, 3), at(1, 3, 15)), (at(1, 5), at(1, 5, 29))]
+
+    assert find_minute_gaps(gaps, peer_gaps=[]) == []
+
+
+def test_find_minute_gaps_long_gap_is_warning_with_detail():
+    findings = find_minute_gaps([(at(1, 17), at(1, 22, 30))], peer_gaps=[])
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert (f.date, f.type, f.severity) == (
+        d(1),
+        IntegrityIssue.Type.MINUTE_GAP,
+        IntegrityIssue.Severity.WARNING,
+    )
+    assert f.detail == {
+        "start": "2026-10-01T17:00:00+00:00",
+        "end": "2026-10-01T22:30:00+00:00",
+        "minutes": 330,
+        "count": 1,
+        "all_assets": False,
+    }
+
+
+def test_find_minute_gaps_marks_gap_shared_by_all_peers():
+    gap = (at(1, 17), at(1, 22))
+    peers_all = [[(at(1, 17), at(1, 21))], [(at(1, 18), at(1, 23))]]
+    peers_some = [[(at(1, 17), at(1, 21))], [(at(1, 3), at(1, 4))]]
+
+    assert find_minute_gaps([gap], peers_all)[0].detail["all_assets"] is True
+    assert find_minute_gaps([gap], peers_some)[0].detail["all_assets"] is False
+
+
+def test_find_minute_gaps_gap_across_midnight_counts_on_both_days():
+    # 23:40~00:20 = 40분. 날짜별로 자르면 20분씩이라 놓친다.
+    findings = find_minute_gaps([(at(1, 23, 40), at(2, 0, 20))], peer_gaps=[])
+
+    assert [f.date for f in findings] == [d(1), d(2)]
+    assert all(f.detail["minutes"] == 40 for f in findings)
+
+
+def test_find_minute_gaps_gap_ending_at_midnight_stays_on_one_day():
+    findings = find_minute_gaps([(at(1, 22), at(2, 0))], peer_gaps=[])
+
+    assert [f.date for f in findings] == [d(1)]
+
+
+def test_find_minute_gaps_keeps_longest_gap_per_day():
+    gaps = [(at(1, 1), at(1, 2)), (at(1, 10), at(1, 13)), (at(1, 20), at(1, 20, 45))]
+
+    findings = find_minute_gaps(gaps, peer_gaps=[])
+
+    assert len(findings) == 1
+    assert findings[0].detail["minutes"] == 180
+    assert findings[0].detail["count"] == 3
