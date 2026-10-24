@@ -147,6 +147,8 @@ python manage.py aggregate_minutes --all             # 시간봉·일봉 집계 
 | GET | `/api/collection-runs/` | 수집 실행 기록 |
 | POST | `/api/backtests/` | 백테스트 실행 (새로 계산 201, 기존 결과 200, 입력 오류 400, 데이터 문제 422, 분당 20회 초과 429) |
 | GET | `/api/backtests/{id}/` | 백테스트 결과 조회 |
+| POST | `/api/reprocess/` | 재처리 (v2). `Authorization: Bearer <ADMIN_API_TOKEN>` 필요, 기본 dry-run(`"dry_run": false`일 때만 반영), 성공 201·같은 종목·기간 실행 중 409·실패 500(전부 롤백), 분봉·집계 31일·일봉 366일까지 |
+| GET | `/api/reprocess/{id}/` | 재처리 이력 (누가·왜·무엇이 바뀌었는지, 날짜별 차이, 재검증 결과) |
 | GET | `/api/cron/collect/` | 정기 수집 (Vercel Cron 전용, `Authorization: Bearer <CRON_SECRET>` 필요, 전 종목 실패 시 500, API 문서에는 숨김) |
 | GET | `/api/docs/`, `/api/schema/` | Swagger UI, OpenAPI 스키마 |
 
