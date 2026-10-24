@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from rest_framework import serializers
 
-from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue
+from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue, ReprocessRun
+from market.upbit import current_trading_day
 
 
 class AssetSerializer(serializers.ModelSerializer):
@@ -84,3 +87,68 @@ class IntegritySummarySerializer(serializers.Serializer):
 
     assets = AssetSummarySerializer(many=True)
     last_run = CollectionRunSerializer(allow_null=True)
+
+
+class ReprocessRequestSerializer(serializers.Serializer):
+    """POST /api/reprocess/ 본문 검증."""
+
+    # 서버리스 함수 제한(300초) 안에 끝나도록 대상별 기간 상한을 둔다.
+    # 분봉 31일 ≈ 업비트 요청 220여 번. 더 긴 기간은 management command(reprocess)로 실행한다.
+    MAX_DAYS = {
+        ReprocessRun.Target.MINUTES: 31,
+        ReprocessRun.Target.AGGREGATES: 31,
+        ReprocessRun.Target.DAILY: 366,
+    }
+
+    symbol = serializers.SlugRelatedField(
+        slug_field="symbol", queryset=Asset.objects.all(), source="asset"
+    )
+    target = serializers.ChoiceField(choices=ReprocessRun.Target.choices)
+    start = serializers.DateField()
+    end = serializers.DateField()
+    reason = serializers.CharField(max_length=200)
+    requested_by = serializers.CharField(max_length=100)
+    # 실수로 데이터를 바꾸지 않도록 기본은 미리보기. 반영하려면 false를 명시한다.
+    dry_run = serializers.BooleanField(default=True)
+
+    def validate(self, attrs):
+        start, end = attrs["start"], attrs["end"]
+        if start > end:
+            raise serializers.ValidationError("start는 end보다 늦을 수 없습니다.")
+        today = current_trading_day()
+        if end >= today:
+            raise serializers.ValidationError(
+                f"end는 마감된 날({today - timedelta(days=1)})까지만 가능합니다."
+            )
+        max_days = self.MAX_DAYS[attrs["target"]]
+        if (end - start).days + 1 > max_days:
+            raise serializers.ValidationError(
+                f"{attrs['target']}는 한 번에 {max_days}일까지 가능합니다."
+                " 더 긴 기간은 reprocess 커맨드로 실행하세요."
+            )
+        return attrs
+
+
+class ReprocessRunSerializer(serializers.ModelSerializer):
+    symbol = serializers.CharField(source="asset.symbol")
+
+    class Meta:
+        model = ReprocessRun
+        fields = [
+            "id",
+            "symbol",
+            "target",
+            "start_date",
+            "end_date",
+            "dry_run",
+            "reason",
+            "requested_by",
+            "status",
+            "rows_before",
+            "rows_after",
+            "changed_rows",
+            "diff",
+            "started_at",
+            "finished_at",
+            "error_message",
+        ]
