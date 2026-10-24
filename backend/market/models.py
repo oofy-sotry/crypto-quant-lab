@@ -151,6 +151,9 @@ class IntegrityIssue(models.Model):
         ZERO_VOLUME = "zero_volume", "거래량 0"
         SPIKE = "spike", "급등락"
         STALE = "stale", "수집 지연"
+        # 분봉 기반 검사 (market/integrity.py run_minute_checks). date는 UTC 날짜 = 일봉 거래일.
+        MINUTE_MISMATCH = "minute_mismatch", "분봉·일봉 불일치"
+        MINUTE_GAP = "minute_gap", "분봉 긴 빈 구간"
 
     class Severity(models.TextChoices):
         ERROR = "error", "오류"
