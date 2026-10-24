@@ -8,7 +8,23 @@ export const ISSUE_TYPE_TEXT: Record<IssueType, string> = {
   zero_volume: "거래량 0",
   spike: "급등락",
   stale: "수집 지연",
+  minute_mismatch: "분봉·일봉 불일치",
+  minute_gap: "분봉 긴 빈 구간",
 };
+
+const FIELD_TEXT: Record<string, string> = {
+  open: "시가",
+  high: "고가",
+  low: "저가",
+  close: "종가",
+  volume: "거래량",
+  value: "거래대금",
+};
+
+/** "2026-10-18T17:01:00+00:00" → "17:01" (UTC) */
+function hhmm(iso: unknown): string {
+  return String(iso).slice(11, 16);
+}
 
 /** 유형별 detail을 한 줄 설명으로 바꾼다. */
 function describe(issue: IntegrityIssue): string {
@@ -25,6 +41,14 @@ function describe(issue: IntegrityIssue): string {
       return `마지막 확정 봉 이후 ${d.lag_days}일 지남`;
     case "zero_volume":
       return "거래량 0";
+    case "minute_mismatch":
+      return Object.keys(d)
+        .map((field) => FIELD_TEXT[field] ?? field)
+        .join(" · ") + " 다름 (분봉 집계 vs 업비트 일봉)";
+    case "minute_gap": {
+      const span = `UTC ${hhmm(d.start)}~${hhmm(d.end)} ${d.minutes}분 빔`;
+      return d.all_assets ? `${span} · 전 종목 동시(거래소 점검 추정)` : `${span} · 이 종목만`;
+    }
   }
 }
 

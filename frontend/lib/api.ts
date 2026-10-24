@@ -52,7 +52,18 @@ export type IntegritySummary = {
   last_run: CollectionRun | null;
 };
 
-export type IssueType = "missing" | "ohlc_invalid" | "non_positive" | "zero_volume" | "spike" | "stale";
+export type IssueType =
+  | "missing"
+  | "ohlc_invalid"
+  | "non_positive"
+  | "zero_volume"
+  | "spike"
+  | "stale"
+  | "minute_mismatch"
+  | "minute_gap";
+
+/** minute_mismatch detail의 필드 하나: 분봉 집계 값과 업비트 일봉 값. */
+export type MismatchField = { minute: string; daily: string };
 
 export type IntegrityIssue = {
   id: number;
@@ -61,7 +72,8 @@ export type IntegrityIssue = {
   type: IssueType;
   severity: "error" | "warning";
   // 유형마다 다르다. spike: {change, prev_date}, ohlc_invalid·non_positive: {open, high, low, close}, stale: {lag_days}
-  detail: Record<string, string | number>;
+  // minute_mismatch: {필드명: {minute, daily}}, minute_gap: {start, end, minutes, count, all_assets}
+  detail: Record<string, string | number | boolean | MismatchField>;
   detected_at: string;
   resolved_at: string | null;
   note: string;
