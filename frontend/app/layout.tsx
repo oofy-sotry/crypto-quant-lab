@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "crypto-quant-lab",
-  description: "업비트 코인 일봉 수집·무결성 검사·백테스트 대시보드",
+  description: "업비트 코인 데이터 수집·무결성 검사·백테스트 대시보드",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
