@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from market.integrity import run_integrity_checks, sync_issues
+from market.integrity import Finding, run_integrity_checks, sync_issues
 from market.models import Asset, DailyCandle, IntegrityIssue
 
 TODAY = date(2026, 10, 10)
@@ -115,3 +115,17 @@ def test_sync_issues_leaves_other_types_and_dates_alone(btc):
     assert recent_missing.resolved_at is not None
     assert spike.resolved_at is None  # 다른 유형
     assert old_missing.resolved_at is None  # 검사하지 않은 기간
+
+
+@pytest.mark.django_db
+def test_sync_issues_does_not_rewrite_unchanged_issues(btc, django_assert_num_queries):
+    T = IntegrityIssue.Type
+    finding = Finding(
+        date(2026, 10, 5), T.SPIKE, IntegrityIssue.Severity.WARNING, {"change": "0.4"}
+    )
+    sync_issues(btc, [finding], [T.SPIKE])
+
+    with django_assert_num_queries(1):  # 기존 이슈 조회만, 쓰기 없음
+        summary = sync_issues(btc, [finding], [T.SPIKE])
+
+    assert summary == {"created": 0, "reopened": 0, "resolved": 0}

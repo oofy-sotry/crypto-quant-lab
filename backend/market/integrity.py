@@ -314,12 +314,15 @@ def sync_issues(
             )
             summary["created"] += 1
             continue
+        changed = (issue.severity, issue.detail) != (f.severity, f.detail)
         issue.severity, issue.detail = f.severity, f.detail
         if issue.resolved_at is not None and not issue.note:
             issue.resolved_at = None
             issue.detected_run = run
             summary["reopened"] += 1
-        issue.save()
+            changed = True
+        if changed:  # 그대로인 이슈까지 매번 UPDATE하지 않는다(매일 Cron마다 이슈 수만큼 쓰기)
+            issue.save()
 
     for key, issue in existing.items():
         if key not in found_keys and issue.resolved_at is None:
