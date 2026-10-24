@@ -27,9 +27,10 @@ export default async function IntegrityPage(props: PageProps<"/integrity">) {
       <section>
         <h1 className="text-2xl font-bold tracking-tight">데이터 품질</h1>
         <p className="mt-1 text-sm text-muted">
-          수집할 때마다 결측일·OHLC 규칙·급등락·수집 지연을 검사합니다. 해결되지 않은 <b className="text-error">오류</b>가
-          기간에 있으면 백테스트를 거부하고(빈 날을 채워 틀린 결과를 내지 않기 위해), <b className="text-warn">경고</b>는
-          실제 시장 움직임일 수 있어 참고용으로만 남깁니다.
+          수집할 때마다 결측일·OHLC 규칙·급등락·수집 지연을 검사하고, 분봉이 있는 기간은 분봉으로 만든 일봉을 업비트
+          일봉과 대조하고 30분 이상 빈 구간을 찾습니다. 해결되지 않은 <b className="text-error">오류</b>가 기간에 있으면
+          백테스트를 거부하고(빈 날을 채워 틀린 결과를 내지 않기 위해), <b className="text-warn">경고</b>는 실제 시장
+          움직임이거나 거래소 점검일 수 있어 참고용으로만 남깁니다.
         </p>
       </section>
 
