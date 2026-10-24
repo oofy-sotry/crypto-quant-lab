@@ -22,6 +22,20 @@ from market.serializers import (
 from market.services import collect_candles
 
 
+def bearer_matches(request, secret: str) -> bool:
+    """Authorization 헤더가 `Bearer <secret>`인지. secret이 비어 있으면 항상 거부한다.
+
+    설정이 빠졌을 때 "빈 값끼리 일치"로 통과하는 구멍을 막는다.
+    """
+    if not secret:
+        return False
+    expected = f"Bearer {secret}".encode()
+    # compare_digest는 영문이 아닌 글자가 섞인 str에 TypeError(500)를 내므로 bytes로 비교한다.
+    received = request.headers.get("Authorization", "").encode()
+    # 비교 시간으로 비밀값을 한 글자씩 추측하지 못하게 상수 시간 비교를 쓴다.
+    return hmac.compare_digest(received, expected)
+
+
 class AssetListView(generics.ListAPIView):
     """수집 대상 종목 목록."""
 
@@ -152,11 +166,7 @@ class CronCollectView(APIView):
     # Vercel Cron 전용 내부 엔드포인트라 공개 API 문서(Swagger)에는 싣지 않는다.
     @extend_schema(exclude=True)
     def get(self, request):
-        expected = f"Bearer {settings.CRON_SECRET}".encode()
-        # compare_digest는 영문이 아닌 글자가 섞인 str에 TypeError(500)를 내므로 bytes로 비교한다.
-        received = request.headers.get("Authorization", "").encode()
-        # 비교 시간으로 비밀값을 한 글자씩 추측하지 못하게 상수 시간 비교를 쓴다.
-        if not settings.CRON_SECRET or not hmac.compare_digest(received, expected):
+        if not bearer_matches(request, settings.CRON_SECRET):
             return Response({"detail": "인증 실패"}, status=401)
 
         if request.query_params.get("sentry_test") == "1":
