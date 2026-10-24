@@ -1,8 +1,14 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
-from market.integrity import check_candle_values, find_missing_dates, find_spikes, find_stale
+from market.integrity import (
+    check_candle_values,
+    find_minute_mismatches,
+    find_missing_dates,
+    find_spikes,
+    find_stale,
+)
 from market.models import IntegrityIssue
 
 
@@ -89,3 +95,56 @@ def test_find_stale_reports_lag_when_collection_stopped():
 
     assert findings[0].type == IntegrityIssue.Type.STALE
     assert findings[0].detail == {"lag_days": 3}
+
+
+def daily(day, o="100", h="110", low="90", c="105", volume="10", value="1000"):
+    return SimpleNamespace(
+        date=d(day),
+        open=Decimal(o),
+        high=Decimal(h),
+        low=Decimal(low),
+        close=Decimal(c),
+        volume=Decimal(volume),
+        value=Decimal(value),
+    )
+
+
+def agg(day, **kwargs):
+    """DailyAgg 대신. bucket은 그날 UTC 0시."""
+    row = daily(day, **kwargs)
+    row.bucket = datetime(2026, 10, day, tzinfo=UTC)
+    return row
+
+
+def test_find_minute_mismatches_matching_days_are_clean():
+    assert find_minute_mismatches([agg(1), agg(2)], [daily(1), daily(2)]) == []
+
+
+def test_find_minute_mismatches_price_difference_is_error():
+    findings = find_minute_mismatches([agg(1, c="104", volume="9")], [daily(1)])
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert (f.date, f.type, f.severity) == (
+        d(1),
+        IntegrityIssue.Type.MINUTE_MISMATCH,
+        IntegrityIssue.Severity.ERROR,
+    )
+    assert f.detail == {
+        "close": {"minute": "104", "daily": "105"},
+        "volume": {"minute": "9", "daily": "10"},
+    }
+
+
+def test_find_minute_mismatches_amount_only_is_warning_beyond_tolerance():
+    within = agg(1, value="1000.0005")  # 상대 5e-7
+    beyond = agg(2, value="1000.002")  # 상대 2e-6
+
+    findings = find_minute_mismatches([within, beyond], [daily(1), daily(2)])
+
+    assert [(f.date, f.severity) for f in findings] == [(d(2), IntegrityIssue.Severity.WARNING)]
+    assert findings[0].detail == {"value": {"minute": "1000.002", "daily": "1000"}}
+
+
+def test_find_minute_mismatches_skips_days_missing_on_either_side():
+    assert find_minute_mismatches([agg(1, c="1")], [daily(2, c="1")]) == []

@@ -1,4 +1,4 @@
-"""일봉 데이터 무결성 검사.
+"""일봉·분봉 데이터 무결성 검사.
 
 각 검사는 DB를 모르는 순수 함수로 두고(입력: 일봉 목록 → 출력: 발견 목록),
 DB 저장은 run_integrity_checks가 맡는다. 그래서 검사 규칙을 DB 없이 테스트할 수 있다.
@@ -6,7 +6,7 @@ DB 저장은 run_integrity_checks가 맡는다. 그래서 검사 규칙을 DB �
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import UTC, date, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
@@ -93,6 +93,46 @@ def find_stale(latest_final: date | None, today: date, max_lag_days: int = 2) ->
     if lag < max_lag_days:
         return []
     return [Finding(latest_final, Type.STALE, Severity.ERROR, {"lag_days": lag})]
+
+
+PRICE_FIELDS = ["open", "high", "low", "close"]
+AMOUNT_FIELDS = ["volume", "value"]
+# 업비트 일봉은 1분봉을 그대로 합친 값이라 1년치 대조에서 가격은 정확히 같고 거래대금만 상대 1e-16
+# 수준(소수 8자리 반올림 누적) 차이가 났다. 그보다 훨씬 크지만 실제 누락 1분보다는 작은 값으로 둔다.
+AMOUNT_REL_TOL = Decimal("0.000001")
+
+
+def find_minute_mismatches(
+    aggs: Iterable, candles: Iterable, rel_tol: Decimal = AMOUNT_REL_TOL
+) -> list[Finding]:
+    """분봉으로 만든 일봉(DailyAgg)과 업비트 일봉(DailyCandle)을 날짜별로 대조한다.
+
+    가격이 하나라도 다르면 error(두 원본 중 하나가 틀렸다), 거래량·거래대금만 rel_tol을 넘게
+    다르면 warning. 한쪽에만 있는 날은 건너뛴다(일봉 결측은 find_missing_dates, 분봉 빈 날은
+    find_minute_gaps가 잡는다).
+    """
+    by_date = {c.date: c for c in candles}
+    findings = []
+    for agg in aggs:
+        day = agg.bucket.astimezone(UTC).date()
+        candle = by_date.get(day)
+        if candle is None:
+            continue
+        diffs = {}
+        for f in PRICE_FIELDS:
+            if getattr(agg, f) != getattr(candle, f):
+                diffs[f] = (getattr(agg, f), getattr(candle, f))
+        price_differs = bool(diffs)
+        for f in AMOUNT_FIELDS:
+            minute, daily = getattr(agg, f), getattr(candle, f)
+            if abs(minute - daily) > abs(daily) * rel_tol:
+                diffs[f] = (minute, daily)
+        if not diffs:
+            continue
+        severity = Severity.ERROR if price_differs else Severity.WARNING
+        detail = {f: {"minute": str(m), "daily": str(c)} for f, (m, c) in diffs.items()}
+        findings.append(Finding(day, Type.MINUTE_MISMATCH, severity, detail))
+    return findings
 
 
 DAILY_TYPES = [
