@@ -1,18 +1,28 @@
 import threading
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.db import connection, transaction
 
 from backtest.services import data_version
 from market.aggregates import aggregate_minutes
-from market.models import Asset, DailyAgg, DailyCandle, HourlyBar, IntegrityIssue, MinuteCandle
+from market.models import (
+    Asset,
+    DailyAgg,
+    DailyCandle,
+    HourlyBar,
+    IntegrityIssue,
+    MinuteCandle,
+    ReprocessRun,
+)
 from market.reprocess import (
     lock_days,
     reprocess_aggregates,
     reprocess_daily,
     reprocess_minutes,
+    run_reprocess,
 )
 from market.services import upsert_candles
 from market.upbit import Candle, MinuteBar
@@ -240,3 +250,91 @@ def test_reprocess_daily_ignores_source_outside_period(btc):
 
     assert result.changed == 1
     assert not DailyCandle.objects.filter(asset=btc, date=outside).exists()
+
+
+def broken_btc_day(btc):
+    """하루치 분봉·집계를 만들고 03시 1시간을 지운다. 원본(업비트 흉내)은 온전한 하루."""
+    fill_minutes(btc, T0, T0 + timedelta(days=1))
+    reprocess_aggregates(btc, DAY, DAY)
+    client = FakeMinuteClient(source_from_db(btc).values())
+    MinuteCandle.objects.filter(
+        asset=btc, ts__gte=T0 + timedelta(hours=3), ts__lt=T0 + timedelta(hours=4)
+    ).delete()
+    reprocess_aggregates(btc, DAY, DAY)  # 빠진 상태로 집계·검사 → 빈 구간 이슈
+    assert IntegrityIssue.objects.filter(asset=btc, resolved_at__isnull=True).exists()
+    return client
+
+
+def snapshot(asset):
+    return (
+        MinuteCandle.objects.filter(asset=asset).count(),
+        list(DailyAgg.objects.filter(asset=asset).values_list("minute_count", "aggregated_at")),
+        list(IntegrityIssue.objects.filter(asset=asset).values_list("type", "resolved_at")),
+    )
+
+
+def run(btc, client, dry_run):
+    return run_reprocess(
+        btc, "minutes", DAY, DAY, dry_run=dry_run, reason="테스트", requested_by="pytest",
+        client=client,
+    )  # fmt: skip
+
+
+@pytest.mark.django_db
+def test_run_reprocess_dry_run_reports_diff_without_changing_db(btc):
+    client = broken_btc_day(btc)
+    before = snapshot(btc)
+
+    record = run(btc, client, dry_run=True)
+
+    assert record.status == ReprocessRun.Status.SUCCESS
+    assert record.dry_run is True
+    assert (record.rows_before, record.rows_after, record.changed_rows) == (1380, 1440, 60)
+    assert record.diff["minutecandle"]["dates"] == {"2026-10-20": {"inserted": 60}}
+    assert record.diff["checks"]["resolved"] == 1  # 실행하면 빈 구간 이슈가 해결될 것
+    assert record.finished_at is not None
+    assert snapshot(btc) == before  # DB는 그대로
+
+
+@pytest.mark.django_db
+def test_run_reprocess_apply_restores_data_and_resolves_issue_then_idempotent(btc):
+    client = broken_btc_day(btc)
+
+    first = run(btc, client, dry_run=False)
+    second = run(btc, client, dry_run=False)
+
+    assert first.changed_rows == 60
+    assert MinuteCandle.objects.filter(asset=btc).count() == 1440
+    assert DailyAgg.objects.get(asset=btc).minute_count == 1440
+    assert not IntegrityIssue.objects.filter(asset=btc, resolved_at__isnull=True).exists()
+    assert second.changed_rows == 0
+    assert second.diff["dailyagg"]["updated"] == 0
+    assert ReprocessRun.objects.count() == 2  # 두 번 다 이력이 남음
+
+
+@pytest.mark.django_db
+def test_run_reprocess_failure_rolls_back_everything(btc):
+    client = broken_btc_day(btc)
+    before = snapshot(btc)
+
+    # 분봉 반영까지 끝난 뒤 재집계 단계에서 실패
+    with patch("market.reprocess.reprocess_aggregates", side_effect=RuntimeError("boom")):
+        record = run(btc, client, dry_run=False)
+
+    assert record.status == ReprocessRun.Status.FAILED
+    assert record.error_message == "RuntimeError: boom"
+    assert record.changed_rows is None
+    assert snapshot(btc) == before  # 앞에서 넣은 분봉 60개도 롤백
+
+
+@pytest.mark.django_db(transaction=True)
+def test_run_reprocess_rejects_while_same_period_is_running(btc):
+    finish = hold_lock_in_other_connection(btc, DAY, DAY)
+    try:
+        record = run(btc, FakeMinuteClient([]), dry_run=False)
+    finally:
+        finish()
+
+    assert record.status == ReprocessRun.Status.REJECTED
+    assert record.changed_rows is None
+    assert ReprocessRun.objects.get().status == ReprocessRun.Status.REJECTED  # 거부도 기록

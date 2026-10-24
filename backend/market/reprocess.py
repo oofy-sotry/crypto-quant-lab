@@ -3,19 +3,23 @@
 바뀐 것만 반영한 뒤 정합성 검사를 다시 돌리고, 결과를 ReprocessRun에 남긴다.
 """
 
+import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
-from django.db import connection
+from django.db import connection, transaction
+from django.utils import timezone
 
 from market.aggregates import MODELS, delete_orphan_aggregates, upsert_aggregates
 from market.integrity import run_integrity_checks, run_minute_checks
 from market.minutes import upsert_minute_candles
-from market.models import DailyAgg, DailyCandle, MinuteCandle
+from market.models import DailyAgg, DailyCandle, MinuteCandle, ReprocessRun
 from market.services import upsert_candles
 from market.upbit import UpbitClient, current_trading_day
+
+logger = logging.getLogger(__name__)
 
 VALUE_FIELDS = ["open", "high", "low", "close", "volume", "value"]
 DELETE_CHUNK = 5000  # IN 목록 하나에 넣는 키 수 (쿼리 파라미터 상한 65,535보다 충분히 작게)
@@ -178,3 +182,65 @@ def reprocess_daily(asset, start: date, end: date, client=None) -> Result:
     }
     changed = sum(len(keys) for keys in changes.values())
     return Result(len(existing), in_range.count(), changed, diff)
+
+
+TARGETS = {
+    ReprocessRun.Target.MINUTES: reprocess_minutes,
+    ReprocessRun.Target.AGGREGATES: reprocess_aggregates,
+    ReprocessRun.Target.DAILY: reprocess_daily,
+}
+
+
+class Rejected(Exception):
+    """같은 종목·기간(하루라도 겹침)의 재처리가 이미 실행 중."""
+
+
+def run_reprocess(
+    asset,
+    target: str,
+    start: date,
+    end: date,
+    *,
+    dry_run: bool,
+    reason: str,
+    requested_by: str,
+    client=None,
+) -> ReprocessRun:
+    """재처리를 실행하고 이력(ReprocessRun)을 남긴다.
+
+    - 이력 행은 트랜잭션 밖에서 만들고 갱신한다. 안에서 만들면 롤백 때 이력도 사라진다.
+    - 트랜잭션 하나 안에서: 락 → 원본 비교·반영 → 재집계 → 재검증. 중간에 실패하면 전부 롤백.
+    - dry-run은 똑같이 다 실행한 뒤 마지막에 롤백한다. 실제 실행과 같은 코드로 계산하므로
+      "미리 본 차이"와 "실제로 바뀔 차이"가 어긋나지 않는다.
+    """
+    run = ReprocessRun.objects.create(
+        asset=asset,
+        target=target,
+        start_date=start,
+        end_date=end,
+        dry_run=dry_run,
+        reason=reason,
+        requested_by=requested_by,
+    )
+    try:
+        with transaction.atomic():
+            if not lock_days(asset, start, end):
+                raise Rejected
+            result = TARGETS[target](asset, start, end, client=client)
+            if dry_run:
+                transaction.set_rollback(True)
+    except Rejected:
+        run.status = ReprocessRun.Status.REJECTED
+    except Exception as exc:
+        logger.exception("재처리 실패: %s", run)
+        run.status = ReprocessRun.Status.FAILED
+        run.error_message = f"{exc.__class__.__name__}: {exc}"
+    else:
+        run.status = ReprocessRun.Status.SUCCESS
+        run.rows_before = result.rows_before
+        run.rows_after = result.rows_after
+        run.changed_rows = result.changed
+        run.diff = result.diff
+    run.finished_at = timezone.now()
+    run.save()
+    return run
