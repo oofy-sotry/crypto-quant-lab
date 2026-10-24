@@ -77,3 +77,17 @@ def test_reprocess_command_validates_input(args, message):
     flat = [x for kv in base.items() for x in kv]
     with pytest.raises(CommandError, match=message):
         call_command("reprocess", *flat, "--end", "2026-10-21", "--reason", "x", stdout=StringIO())
+
+
+@pytest.mark.django_db
+def test_reprocess_command_rejects_unfinished_day():
+    with (
+        patch(
+            "market.management.commands.reprocess.current_trading_day",
+            return_value=date(2026, 10, 21),
+        ),
+        pytest.raises(CommandError, match=r"마감된 날\(2026-10-20\)까지만"),
+    ):
+        run()  # --end 2026-10-21 = 진행 중인 날
+
+    assert not ReprocessRun.objects.exists()

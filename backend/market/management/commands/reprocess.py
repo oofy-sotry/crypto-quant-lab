@@ -1,10 +1,11 @@
 import getpass
-from datetime import date
+from datetime import date, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 
 from market.models import Asset, ReprocessRun
 from market.reprocess import run_reprocess
+from market.upbit import current_trading_day
 
 
 class Command(BaseCommand):
@@ -29,6 +30,10 @@ class Command(BaseCommand):
             raise CommandError(f"없는 종목: {options['asset']}") from exc
         if options["start"] > options["end"]:
             raise CommandError("--start가 --end보다 늦습니다.")
+        today = current_trading_day()
+        if options["end"] >= today:
+            # 진행 중인 날은 분봉·일봉 값이 아직 바뀐다(API와 같은 규칙).
+            raise CommandError(f"--end는 마감된 날({today - timedelta(days=1)})까지만 가능합니다.")
 
         run = run_reprocess(
             asset,
