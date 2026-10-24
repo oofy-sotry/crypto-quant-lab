@@ -182,3 +182,43 @@ class IntegrityIssue(models.Model):
 
     def __str__(self):
         return f"{self.asset} {self.date} {self.type}"
+
+
+class ReprocessRun(models.Model):
+    """재처리 한 번의 이력. dry-run도 남긴다(무엇이 바뀔지 미리 본 기록)."""
+
+    class Target(models.TextChoices):
+        MINUTES = "minutes", "분봉 재수집 → 재집계 → 검사"
+        AGGREGATES = "aggregates", "재집계 → 검사"
+        DAILY = "daily", "일봉 재수집 → 검사"
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "실행 중"
+        SUCCESS = "success", "성공"
+        FAILED = "failed", "실패(롤백됨)"
+        REJECTED = "rejected", "거부(같은 종목·기간 실행 중)"
+
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="reprocess_runs")
+    target = models.CharField(max_length=20, choices=Target.choices)
+    start_date = models.DateField()  # UTC 날짜 = 업비트 일봉 거래일, 포함
+    end_date = models.DateField()  # 포함
+    dry_run = models.BooleanField()
+    reason = models.CharField(max_length=200)
+    requested_by = models.CharField(max_length=100)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
+    # 대상의 주 테이블(분봉·집계 일봉·일봉) 기간 안 행 수와 바뀐 행 수(추가+변경+삭제)
+    rows_before = models.PositiveIntegerField(null=True, blank=True)
+    rows_after = models.PositiveIntegerField(null=True, blank=True)
+    changed_rows = models.PositiveIntegerField(null=True, blank=True)
+    # 테이블별 추가·변경·삭제 수와 날짜별 내역, 재검증 결과
+    diff = models.JSONField(default=dict, blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        mode = "dry-run" if self.dry_run else "실행"
+        return f"{self.asset} {self.target} {self.start_date}~{self.end_date} {mode} {self.status}"
