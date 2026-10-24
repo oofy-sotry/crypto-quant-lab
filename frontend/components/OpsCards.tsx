@@ -16,7 +16,7 @@ function Card({ label, tone, value, children }: { label: string; tone: Tone; val
   );
 }
 
-const SERVICE_TEXT: Record<string, string> = { database: "DB (MySQL)", cache: "Redis" };
+const SERVICE_TEXT: Record<string, string> = { database: "DB (PostgreSQL)", cache: "Redis" };
 
 /** 운영 상태 화면 위쪽 카드 3개: 서버 의존 서비스, 마지막 자동 수집, 최근 자동 수집 성공 일수 */
 export function OpsCards({ health, runs, now }: { health: Health | null; runs: CollectionRun[]; now: number }) {
