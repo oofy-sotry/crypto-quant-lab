@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from market.aggregates import AGG_VERSION, aggregate_minutes
+from market.aggregates import AGG_VERSION, aggregate_minutes, upsert_aggregates
 from market.models import Asset, DailyAgg, HourlyBar, MinuteCandle
 
 DAY = datetime(2026, 10, 22, tzinfo=UTC)
@@ -131,3 +131,17 @@ def test_aggregate_minutes_keeps_assets_separate(btc, three_minutes):
 
     assert not HourlyBar.objects.filter(asset=eth).exists()
     assert HourlyBar.objects.get(asset=btc, bucket=DAY.replace(hour=9)).minute_count == 3
+
+
+@pytest.mark.django_db
+def test_upsert_aggregates_reports_inserted_and_updated_buckets(btc, three_minutes):
+    nine, ten = DAY.replace(hour=9), DAY.replace(hour=10)
+
+    assert sorted(upsert_aggregates(btc, "hour", DAY, DAY + timedelta(days=1))) == [
+        (nine, True),
+        (ten, True),
+    ]
+    MinuteCandle.objects.filter(ts=ten).update(close=Decimal("1"))
+
+    # 바뀐 10시만, 새로 넣은 게 아니라 고친 것으로
+    assert upsert_aggregates(btc, "hour", DAY, DAY + timedelta(days=1)) == [(ten, False)]

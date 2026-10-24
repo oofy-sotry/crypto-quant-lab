@@ -29,7 +29,9 @@ VALUE_COLUMNS = [
 # - 수익률은 같은 구간 안에서만 계산한다(구간 첫 분은 직전 분이 없음).
 #   범위를 어디서 끊어 다시 집계해도 결과가 같아야 재처리가 멱등이 된다.
 # - ON CONFLICT ... WHERE: 값이 그대로면 UPDATE하지 않는다 → aggregated_at이 괜히 바뀌지 않고,
-#   rowcount가 "실제로 바뀐 행 수"가 된다.
+#   RETURNING에는 실제로 새로 넣거나 바뀐 행만 나온다.
+# - RETURNING (xmax = 0): 새로 INSERT된 행은 xmax(행을 지우거나 고친 트랜잭션 id)가 0이고,
+#   ON CONFLICT로 UPDATE된 행은 0이 아니다. 추가와 변경을 한 문장에서 구분하는 PostgreSQL 관용구.
 # - vwap: numeric 나눗셈은 피연산자 자릿수로 정한 소수 자리(여기선 12자리)에서 한 번 반올림한다.
 #   그 값을 다시 8자리로 반올림하면 이중 반올림으로 마지막 자리가 1 틀릴 수 있다
 #   (…264|4999… → …2645000 → …265). 소수 20자리로 나눈 뒤 8자리로 반올림한다.
@@ -55,6 +57,7 @@ GROUP BY asset_id, bucket
 ON CONFLICT (asset_id, bucket) DO UPDATE
 SET {updates}, aggregated_at = EXCLUDED.aggregated_at
 WHERE ({target_values}) IS DISTINCT FROM ({excluded_values})
+RETURNING bucket, ({table}.xmax = 0) AS inserted
 """
 
 
@@ -71,10 +74,16 @@ def _build_sql(model: type[AggBar]) -> str:
 
 
 def aggregate_minutes(asset: Asset, unit: str, start: datetime, end: datetime) -> int:
+    """upsert_aggregates와 같고, 새로 넣거나 바뀐 행 수만 돌려준다."""
+    return len(upsert_aggregates(asset, unit, start, end))
+
+
+def upsert_aggregates(
+    asset: Asset, unit: str, start: datetime, end: datetime
+) -> list[tuple[datetime, bool]]:
     """[start, end) 분봉을 unit("hour"|"day") 구간으로 집계해 저장한다.
 
-    새로 넣거나 값이 바뀐 행 수를 돌려준다.
-
+    새로 넣거나 값이 바뀐 구간만 (구간 시작, 새로 넣었는지)로 돌려준다.
     start·end는 구간 경계에 맞춰 넘긴다(구간 중간에서 자르면 일부 분봉만으로 집계된다).
     분봉이 하나도 없는 구간은 행을 만들지 않는다.
     """
@@ -88,4 +97,4 @@ def aggregate_minutes(asset: Asset, unit: str, start: datetime, end: datetime) -
     }
     with connection.cursor() as cursor:
         cursor.execute(_build_sql(model), params)
-        return cursor.rowcount
+        return cursor.fetchall()
