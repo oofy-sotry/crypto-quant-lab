@@ -3,9 +3,16 @@
 바뀐 것만 반영한 뒤 정합성 검사를 다시 돌리고, 결과를 ReprocessRun에 남긴다.
 """
 
-from datetime import date
+from collections import Counter, defaultdict
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 
 from django.db import connection
+
+from market.aggregates import MODELS, delete_orphan_aggregates, upsert_aggregates
+from market.integrity import run_minute_checks
+from market.models import DailyAgg
 
 
 def lock_days(asset, start: date, end: date) -> bool:
@@ -24,3 +31,70 @@ def lock_days(asset, start: date, end: date) -> bool:
             [asset.id, start.toordinal(), end.toordinal()],
         )
         return cursor.fetchone()[0]
+
+
+@dataclass
+class Result:
+    """대상 하나를 재처리한 결과. rows_*·changed는 대상의 주 테이블 기준."""
+
+    rows_before: int
+    rows_after: int
+    changed: int
+    diff: dict
+
+
+def utc_range(start: date, end: date) -> tuple[datetime, datetime]:
+    """UTC 날짜 start~end(포함) → [start 0시, end 다음 날 0시)."""
+    return (
+        datetime.combine(start, time(), tzinfo=UTC),
+        datetime.combine(end + timedelta(days=1), time(), tzinfo=UTC),
+    )
+
+
+def summarize(changes: dict[str, Iterable], day_of: Callable) -> dict:
+    """{"inserted": 키들, "updated": ..., "deleted": ...} → 개수와 날짜별 개수."""
+    summary: dict = {}
+    dates: dict[str, Counter] = defaultdict(Counter)
+    for kind, keys in changes.items():
+        keys = list(keys)
+        summary[kind] = len(keys)
+        for key in keys:
+            dates[day_of(key).isoformat()][kind] += 1
+    summary["dates"] = {day: dict(counts) for day, counts in sorted(dates.items())}
+    return summary
+
+
+def bucket_day(bucket: datetime) -> date:
+    return bucket.astimezone(UTC).date()
+
+
+def reprocess_aggregates(asset, start: date, end: date, client=None) -> Result:
+    """기간의 시간봉·일봉 집계를 지금 있는 분봉으로 다시 만들고, 분봉 검사를 다시 돌린다.
+
+    바뀐 구간만 갱신하고, 분봉이 사라진 구간의 집계는 지운다 → 기간 안 집계가 "지금 분봉으로
+    만든 결과"로 교체된다. client는 다른 대상과 호출 형태를 맞추려고 받기만 한다(업비트 호출 없음).
+    """
+    range_start, range_end = utc_range(start, end)
+
+    def count_daily():
+        return DailyAgg.objects.filter(
+            asset=asset, bucket__gte=range_start, bucket__lt=range_end
+        ).count()
+
+    before = count_daily()
+    diff = {}
+    for unit, model in MODELS.items():
+        upserted = upsert_aggregates(asset, unit, range_start, range_end)
+        deleted = delete_orphan_aggregates(asset, unit, range_start, range_end)
+        diff[model._meta.model_name] = summarize(
+            {
+                "inserted": [b for b, inserted in upserted if inserted],
+                "updated": [b for b, inserted in upserted if not inserted],
+                "deleted": deleted,
+            },
+            bucket_day,
+        )
+    diff["checks"] = run_minute_checks(start, end).get(asset.symbol, {})
+    daily = diff["dailyagg"]
+    changed = daily["inserted"] + daily["updated"] + daily["deleted"]
+    return Result(before, count_daily(), changed, diff)
