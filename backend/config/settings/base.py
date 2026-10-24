@@ -125,6 +125,6 @@ DASHBOARD_REVALIDATE_SECRET = env("DASHBOARD_REVALIDATE_SECRET", default="")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "crypto-quant-lab API",
-    "DESCRIPTION": "업비트 코인 일봉 수집·무결성 검사·백테스트 API",
+    "DESCRIPTION": "업비트 코인 일봉·분봉 수집, 집계·무결성 검사·재처리, 백테스트 API",
     "VERSION": "0.1.0",
 }
