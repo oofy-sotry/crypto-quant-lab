@@ -13,7 +13,11 @@ export default async function AssetPage(props: PageProps<"/assets/[symbol]">) {
   const asset = summary.assets.find((a) => a.symbol === symbol);
   if (!asset) notFound();
 
-  const candles = await getCandles(symbol);
+  // 다른 화면처럼 API가 실패해도 오류 페이지 대신 안내 문구를 보여 준다.
+  const candles = await getCandles(symbol).catch(() => null);
+  if (!candles) {
+    return <p className="rounded-xl border border-border bg-panel p-4 text-sm text-muted">API 응답이 없어 차트를 불러오지 못했습니다.</p>;
+  }
   // 가격 문자열(Decimal)을 차트용 숫자로 바꾸고 필드 이름을 줄여 브라우저로 보내는 양을 줄인다.
   const bars: Bar[] = candles.map((c) => ({
     t: c.date,
