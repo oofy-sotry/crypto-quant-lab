@@ -11,10 +11,11 @@ from datetime import UTC, date, datetime, time, timedelta
 from django.db import connection
 
 from market.aggregates import MODELS, delete_orphan_aggregates, upsert_aggregates
-from market.integrity import run_minute_checks
+from market.integrity import run_integrity_checks, run_minute_checks
 from market.minutes import upsert_minute_candles
-from market.models import DailyAgg, MinuteCandle
-from market.upbit import UpbitClient
+from market.models import DailyAgg, DailyCandle, MinuteCandle
+from market.services import upsert_candles
+from market.upbit import UpbitClient, current_trading_day
 
 VALUE_FIELDS = ["open", "high", "low", "close", "volume", "value"]
 DELETE_CHUNK = 5000  # IN 목록 하나에 넣는 키 수 (쿼리 파라미터 상한 65,535보다 충분히 작게)
@@ -142,5 +143,38 @@ def reprocess_minutes(asset, start: date, end: date, client=None) -> Result:
 
     aggregates = reprocess_aggregates(asset, start, end)
     diff = {"minutecandle": summarize(changes, bucket_day), **aggregates.diff}
+    changed = sum(len(keys) for keys in changes.values())
+    return Result(len(existing), in_range.count(), changed, diff)
+
+
+def reprocess_daily(asset, start: date, end: date, client=None) -> Result:
+    """기간의 일봉을 업비트에서 다시 받아 다른 것만 반영하고, 일봉 무결성 검사를 다시 돌린다.
+
+    값이 같은 일봉은 건드리지 않아 collected_at이 그대로다. 백테스트 캐시 키의 데이터 버전이
+    Max(collected_at)이므로, 실제로 바뀐 일봉이 있을 때만 캐시가 무효화된다.
+    """
+    client = client or UpbitClient()
+    today = current_trading_day()
+    in_range = DailyCandle.objects.filter(asset=asset, date__range=(start, end))
+
+    fresh_candles = {
+        c.date: c for c in client.iter_daily_candles(asset.symbol, since=start) if c.date <= end
+    }
+    fresh = {
+        day: (*(getattr(c, f) for f in VALUE_FIELDS), day < today)
+        for day, c in fresh_candles.items()
+    }
+    existing = {row[0]: row[1:] for row in in_range.values_list("date", *VALUE_FIELDS, "is_final")}
+    changes = compare(existing, fresh)
+
+    upsert_candles(
+        asset, [fresh_candles[d] for d in changes["inserted"] + changes["updated"]], today=today
+    )
+    in_range.filter(date__in=changes["deleted"]).delete()
+
+    diff = {
+        "dailycandle": summarize(changes, lambda day: day),
+        "checks": run_integrity_checks(asset, today=today),
+    }
     changed = sum(len(keys) for keys in changes.values())
     return Result(len(existing), in_range.count(), changed, diff)

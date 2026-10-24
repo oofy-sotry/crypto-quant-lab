@@ -5,10 +5,17 @@ from decimal import Decimal
 import pytest
 from django.db import connection, transaction
 
+from backtest.services import data_version
 from market.aggregates import aggregate_minutes
-from market.models import Asset, DailyAgg, HourlyBar, IntegrityIssue, MinuteCandle
-from market.reprocess import lock_days, reprocess_aggregates, reprocess_minutes
-from market.upbit import MinuteBar
+from market.models import Asset, DailyAgg, DailyCandle, HourlyBar, IntegrityIssue, MinuteCandle
+from market.reprocess import (
+    lock_days,
+    reprocess_aggregates,
+    reprocess_daily,
+    reprocess_minutes,
+)
+from market.services import upsert_candles
+from market.upbit import Candle, MinuteBar
 
 DAY = date(2026, 10, 20)
 T0 = datetime(2026, 10, 20, tzinfo=UTC)
@@ -178,3 +185,58 @@ def test_reprocess_minutes_same_source_changes_nothing(btc):
 
     assert result.changed == 0
     assert result.diff["dailyagg"]["updated"] == 0
+
+
+class FakeDailyClient:
+    def __init__(self, candles):
+        self.candles = sorted(candles, key=lambda c: c.date, reverse=True)
+
+    def iter_daily_candles(self, market, since=None):
+        return iter(c for c in self.candles if since is None or c.date >= since)
+
+
+def candle(day, close="100"):
+    p = Decimal("100")
+    c = Decimal(close)
+    return Candle(date=day, open=p, high=max(p, c), low=min(p, c), close=c,
+                  volume=Decimal(1), value=c)  # fmt: skip
+
+
+@pytest.mark.django_db
+def test_reprocess_daily_unchanged_source_keeps_data_version(btc):
+    days = [DAY - timedelta(days=i) for i in range(3)]
+    upsert_candles(btc, [candle(d) for d in days], today=DAY + timedelta(days=1))
+    version = data_version(btc)
+
+    result = reprocess_daily(btc, days[-1], DAY, client=FakeDailyClient([candle(d) for d in days]))
+
+    assert result.changed == 0
+    assert data_version(btc) == version  # 백테스트 캐시 그대로
+
+
+@pytest.mark.django_db
+def test_reprocess_daily_changed_candle_updates_and_bumps_data_version(btc):
+    days = [DAY - timedelta(days=i) for i in range(3)]
+    upsert_candles(btc, [candle(d) for d in days], today=DAY + timedelta(days=1))
+    DailyCandle.objects.filter(asset=btc, date=days[1]).delete()  # 하루 빠짐
+    version = data_version(btc)
+    source = [candle(days[0], close="105"), candle(days[1]), candle(days[2])]
+
+    result = reprocess_daily(btc, days[-1], DAY, client=FakeDailyClient(source))
+
+    assert result.diff["dailycandle"]["inserted"] == 1
+    assert result.diff["dailycandle"]["updated"] == 1
+    assert (result.rows_before, result.rows_after) == (2, 3)
+    assert DailyCandle.objects.get(asset=btc, date=DAY).close == Decimal("105")
+    assert data_version(btc) != version  # 바뀐 일봉이 있으니 캐시 무효화
+    assert "checks" in result.diff
+
+
+@pytest.mark.django_db
+def test_reprocess_daily_ignores_source_outside_period(btc):
+    outside = DAY + timedelta(days=1)
+
+    result = reprocess_daily(btc, DAY, DAY, client=FakeDailyClient([candle(DAY), candle(outside)]))
+
+    assert result.changed == 1
+    assert not DailyCandle.objects.filter(asset=btc, date=outside).exists()
