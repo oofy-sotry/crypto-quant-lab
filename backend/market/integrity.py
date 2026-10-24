@@ -232,15 +232,21 @@ def find_gaps_in_db(asset, start: datetime, end: datetime, min_gap: timedelta) -
         return [tuple(row) for row in cursor.fetchall()]
 
 
-def run_minute_checks(start: date, end: date, run=None, min_gap: timedelta = MIN_GAP) -> dict:
-    """활성 종목의 start~end(UTC 날짜, 둘 다 포함) 분봉을 검사하고 IntegrityIssue에 반영한다.
+def run_minute_checks(
+    start: date, end: date, run=None, min_gap: timedelta = MIN_GAP, targets=None
+) -> dict:
+    """start~end(UTC 날짜, 둘 다 포함) 분봉을 검사하고 IntegrityIssue에 반영한다.
 
     - 분봉 집계(DailyAgg) vs 업비트 확정 일봉 대조
     - 30분 이상 빈 구간 (다른 종목도 같이 비었는지 함께 표시)
+    targets(없으면 활성 종목 전체)의 이슈만 갱신한다. 빈 구간이 전 종목 공통인지는 활성 종목
+    전체와 비교한다. 한 종목 재처리가 다른 종목 이슈를 몰래 바꾸거나, 날짜가 겹치는 다른 종목
+    재처리와 같은 이슈를 동시에 만들다 충돌하지 않게 하기 위해서다.
     기간 안의 분봉 이슈만 갱신·자동 해결한다. 분봉이 아예 없는 기간(분봉을 아직 수집하지 않음)은
     검사하지 않는다. 돌려주는 값: {종목 코드: sync_issues 요약}.
     """
     assets = list(Asset.objects.filter(is_active=True))
+    targets = assets if targets is None else list(targets)
     range_start = datetime.combine(start, time(), tzinfo=UTC)
     range_end = datetime.combine(end + timedelta(days=1), time(), tzinfo=UTC)
     has_minutes = MinuteCandle.objects.filter(
@@ -249,10 +255,14 @@ def run_minute_checks(start: date, end: date, run=None, min_gap: timedelta = MIN
     if not has_minutes:
         return {}
 
-    gaps = {a.id: find_gaps_in_db(a, range_start, range_end, min_gap) for a in assets}
+    # 비교 대상(활성 종목)과 검사 대상(targets)의 빈 구간을 한 번씩만 구한다.
+    gaps = {
+        a.id: find_gaps_in_db(a, range_start, range_end, min_gap)
+        for a in {a.id: a for a in [*assets, *targets]}.values()
+    }
     summary = {}
-    for asset in assets:
-        peers = [g for asset_id, g in gaps.items() if asset_id != asset.id]
+    for asset in targets:
+        peers = [gaps[a.id] for a in assets if a.id != asset.id]
         aggs = asset.dailyaggs.filter(bucket__gte=range_start, bucket__lt=range_end)
         candles = asset.candles.filter(is_final=True, date__range=(start, end))
         findings = [

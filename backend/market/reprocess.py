@@ -104,7 +104,7 @@ def reprocess_aggregates(asset, start: date, end: date, client=None) -> Result:
             },
             bucket_day,
         )
-    diff["checks"] = run_minute_checks(start, end).get(asset.symbol, {})
+    diff["checks"] = run_minute_checks(start, end, targets=[asset]).get(asset.symbol, {})
     daily = diff["dailyagg"]
     changed = daily["inserted"] + daily["updated"] + daily["deleted"]
     return Result(before, count_daily(), changed, diff)

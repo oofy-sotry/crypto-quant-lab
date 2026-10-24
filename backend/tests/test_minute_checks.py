@@ -169,3 +169,17 @@ def test_daily_checks_do_not_resolve_minute_issues(btc):
 
     issue.refresh_from_db()
     assert issue.resolved_at is None
+
+
+@pytest.mark.django_db
+def test_run_minute_checks_targets_only_update_given_assets(assets, btc):
+    maintenance = (T0 + timedelta(hours=17), T0 + timedelta(hours=20))
+    for a in assets:
+        fill_minutes(a, T0, T0 + timedelta(days=1), skip=[maintenance])
+
+    summary = run_minute_checks(DAY, DAY, targets=[btc])
+
+    assert list(summary) == ["KRW-BTC"]
+    issue = IntegrityIssue.objects.get()  # 다른 종목 이슈는 만들지 않는다
+    assert issue.asset == btc
+    assert issue.detail["all_assets"] is True  # 비교에는 다른 종목도 쓴다
