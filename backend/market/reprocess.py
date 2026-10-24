@@ -155,7 +155,7 @@ def reprocess_daily(asset, start: date, end: date, client=None) -> Result:
     """기간의 일봉을 업비트에서 다시 받아 다른 것만 반영하고, 일봉 무결성 검사를 다시 돌린다.
 
     값이 같은 일봉은 건드리지 않아 collected_at이 그대로다. 백테스트 캐시 키의 데이터 버전이
-    Max(collected_at)이므로, 실제로 바뀐 일봉이 있을 때만 캐시가 무효화된다.
+    Max(collected_at) + 행 수이므로, 실제로 바뀐(추가·변경·삭제) 일봉이 있을 때만 캐시가 무효화된다.
     """
     client = client or UpbitClient()
     today = current_trading_day()
