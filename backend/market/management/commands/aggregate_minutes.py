@@ -6,6 +6,7 @@ from django.db.models import Min
 from django.utils import timezone
 
 from market.aggregates import MODELS, aggregate_minutes
+from market.integrity import run_minute_checks
 from market.models import Asset
 
 
@@ -15,7 +16,8 @@ def utc_midnight(dt: datetime) -> datetime:
 
 class Command(BaseCommand):
     help = (
-        "분봉을 시간봉·일봉으로 집계한다. 기본은 활성 종목 전체의 최근 2일(UTC)."
+        "분봉을 시간봉·일봉으로 집계하고 분봉 정합성 검사를 돌린다."
+        " 기본은 활성 종목 전체의 최근 2일(UTC)."
         " 오늘(UTC)처럼 아직 끝나지 않은 날은 집계하지 않는다."
     )
 
@@ -35,6 +37,7 @@ class Command(BaseCommand):
                 raise CommandError(f"없는 종목: {', '.join(sorted(missing))}")
 
         end = utc_midnight(timezone.now())  # 오늘 0시(UTC) 전까지 = 끝난 날만
+        starts = []
         for asset in assets:
             if options["all"]:
                 first = asset.minute_candles.aggregate(first=Min("ts"))["first"]
@@ -44,6 +47,7 @@ class Command(BaseCommand):
                 start = utc_midnight(first)
             else:
                 start = end - timedelta(days=options["days"])
+            starts.append(start)
 
             for unit in MODELS:
                 started = time.monotonic()
@@ -52,3 +56,15 @@ class Command(BaseCommand):
                     f"[{asset.symbol}] {unit} {start:%Y-%m-%d}~{end - timedelta(days=1):%Y-%m-%d}"
                     f" 바뀐 행 {changed:,}, {time.monotonic() - started:.1f}초"
                 )
+
+        if not starts:
+            return
+        # 빈 구간이 전 종목 공통인지 보려면 다른 종목도 함께 봐야 해서
+        # 검사는 활성 종목 전체로 한다.
+        first_day, last_day = min(starts).date(), (end - timedelta(days=1)).date()
+        summary = run_minute_checks(first_day, last_day)
+        for symbol, s in summary.items():
+            self.stdout.write(
+                f"[{symbol}] 분봉 검사 {first_day}~{last_day}: 새 이슈 {s['created']},"
+                f" 다시 열림 {s['reopened']}, 해결 {s['resolved']}"
+            )

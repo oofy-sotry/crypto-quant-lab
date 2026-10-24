@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from django.core.management import CommandError, call_command
 
-from market.models import Asset, DailyAgg, HourlyBar, MinuteCandle
+from market.models import Asset, DailyAgg, HourlyBar, IntegrityIssue, MinuteCandle
 
 NOW = datetime(2026, 10, 23, 6, 30, tzinfo=UTC)
 TODAY = datetime(2026, 10, 23, tzinfo=UTC)
@@ -67,3 +67,25 @@ def test_aggregate_minutes_command_all_skips_assets_without_minutes(btc):
 def test_aggregate_minutes_command_rejects_unknown_asset():
     with pytest.raises(CommandError, match="KRW-NOPE"):
         run("--asset", "KRW-NOPE")
+
+
+@pytest.mark.django_db
+def test_aggregate_minutes_command_runs_minute_checks_for_all_assets(btc):
+    yesterday = TODAY - timedelta(days=1)
+    minute = yesterday
+    while minute < TODAY:  # BTC만 어제 하루 꽉 채움
+        add_minute(btc, minute)
+        minute += timedelta(minutes=1)
+
+    out = run("--days", "1", "--asset", "KRW-BTC")
+
+    # BTC는 깨끗하고, 분봉이 없는 다른 종목은 하루 전체가 빈 구간
+    gaps = IntegrityIssue.objects.filter(type=IntegrityIssue.Type.MINUTE_GAP)
+    assert sorted(gaps.values_list("asset__symbol", flat=True)) == [
+        "KRW-DOGE",
+        "KRW-ETH",
+        "KRW-SOL",
+        "KRW-XRP",
+    ]
+    assert "[KRW-BTC] 분봉 검사 2026-10-22~2026-10-22: 새 이슈 0" in out
+    assert "[KRW-ETH] 분봉 검사 2026-10-22~2026-10-22: 새 이슈 1" in out
