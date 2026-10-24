@@ -6,12 +6,13 @@ DB 저장은 run_integrity_checks가 맡는다. 그래서 검사 규칙을 DB �
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
+from django.db import connection
 from django.utils import timezone
 
-from market.models import IntegrityIssue
+from market.models import Asset, IntegrityIssue, MinuteCandle
 
 Type = IntegrityIssue.Type
 Severity = IntegrityIssue.Severity
@@ -202,6 +203,66 @@ def run_integrity_checks(asset, today: date, run=None) -> dict:
         *find_stale(candles[-1].date, today),
     ]
     return sync_issues(asset, findings, DAILY_TYPES, run=run)
+
+
+MINUTE_TYPES = [Type.MINUTE_MISMATCH, Type.MINUTE_GAP]
+
+# 범위 앞뒤에 가상의 분봉(시작 1분 전, 끝)을 넣어 범위 처음·끝이 비어 있는 것도 빈 구간으로 잡는다.
+# 분봉이 하나도 없으면 범위 전체가 빈 구간 하나가 된다.
+GAP_SQL = """
+SELECT gap_start, gap_end FROM (
+    SELECT lag(ts) OVER (ORDER BY ts) + interval '1 minute' AS gap_start, ts AS gap_end
+    FROM (
+        SELECT ts FROM {table} WHERE asset_id = %(asset_id)s AND ts >= %(start)s AND ts < %(end)s
+        UNION ALL SELECT %(start)s::timestamptz - interval '1 minute'
+        UNION ALL SELECT %(end)s::timestamptz
+    ) t
+) g
+WHERE gap_end - gap_start >= %(min_gap)s
+ORDER BY gap_start
+"""
+
+
+def find_gaps_in_db(asset, start: datetime, end: datetime, min_gap: timedelta) -> list[Gap]:
+    """[start, end)에서 분봉이 min_gap 이상 연속으로 없는 구간을 DB에서 찾는다."""
+    sql = GAP_SQL.format(table=MinuteCandle._meta.db_table)
+    params = {"asset_id": asset.id, "start": start, "end": end, "min_gap": min_gap}
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        return [tuple(row) for row in cursor.fetchall()]
+
+
+def run_minute_checks(start: date, end: date, run=None, min_gap: timedelta = MIN_GAP) -> dict:
+    """활성 종목의 start~end(UTC 날짜, 둘 다 포함) 분봉을 검사하고 IntegrityIssue에 반영한다.
+
+    - 분봉 집계(DailyAgg) vs 업비트 확정 일봉 대조
+    - 30분 이상 빈 구간 (다른 종목도 같이 비었는지 함께 표시)
+    기간 안의 분봉 이슈만 갱신·자동 해결한다. 분봉이 아예 없는 기간(분봉을 아직 수집하지 않음)은
+    검사하지 않는다. 돌려주는 값: {종목 코드: sync_issues 요약}.
+    """
+    assets = list(Asset.objects.filter(is_active=True))
+    range_start = datetime.combine(start, time(), tzinfo=UTC)
+    range_end = datetime.combine(end + timedelta(days=1), time(), tzinfo=UTC)
+    has_minutes = MinuteCandle.objects.filter(
+        asset__in=assets, ts__gte=range_start, ts__lt=range_end
+    ).exists()
+    if not has_minutes:
+        return {}
+
+    gaps = {a.id: find_gaps_in_db(a, range_start, range_end, min_gap) for a in assets}
+    summary = {}
+    for asset in assets:
+        peers = [g for asset_id, g in gaps.items() if asset_id != asset.id]
+        aggs = asset.dailyaggs.filter(bucket__gte=range_start, bucket__lt=range_end)
+        candles = asset.candles.filter(is_final=True, date__range=(start, end))
+        findings = [
+            *find_minute_mismatches(aggs, candles),
+            *find_minute_gaps(gaps[asset.id], peers, min_gap=min_gap),
+        ]
+        summary[asset.symbol] = sync_issues(
+            asset, findings, MINUTE_TYPES, run=run, dates=(start, end)
+        )
+    return summary
 
 
 def sync_issues(
