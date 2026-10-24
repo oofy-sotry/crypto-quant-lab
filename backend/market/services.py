@@ -2,7 +2,6 @@ import logging
 from collections.abc import Iterable
 from datetime import date, timedelta
 
-from django.db import connection
 from django.utils import timezone
 
 from market.integrity import run_integrity_checks
@@ -40,17 +39,12 @@ def upsert_candles(asset: Asset, candles: Iterable[Candle], today: date | None =
     if not rows:
         return 0
 
-    # MySQL의 ON DUPLICATE KEY UPDATE는 충돌 컬럼을 지정하지 않고 걸린 unique 제약을 쓴다.
-    # PostgreSQL/SQLite는 ON CONFLICT (asset, date)처럼 지정해야 한다.
-    unique_fields = None
-    if connection.features.supports_update_conflicts_with_target:
-        unique_fields = ["asset", "date"]
-
+    # PostgreSQL: INSERT ... ON CONFLICT (asset_id, date) DO UPDATE
     DailyCandle.objects.bulk_create(
         rows,
         batch_size=500,
         update_conflicts=True,
-        unique_fields=unique_fields,
+        unique_fields=["asset", "date"],
         update_fields=UPDATE_FIELDS,
     )
     return len(rows)
