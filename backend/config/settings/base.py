@@ -13,6 +13,8 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
 # Vercel Cron이 Authorization: Bearer 헤더로 보내는 값. 비어 있으면 Cron 엔드포인트는 모두 거부한다.
 CRON_SECRET = env("CRON_SECRET", default="")
+# 재처리 API(POST /api/reprocess/)용 관리자 토큰. 비어 있으면 재처리 API는 모두 거부한다.
+ADMIN_API_TOKEN = env("ADMIN_API_TOKEN", default="")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
