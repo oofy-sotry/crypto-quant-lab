@@ -30,12 +30,15 @@ VALUE_COLUMNS = [
 #   범위를 어디서 끊어 다시 집계해도 결과가 같아야 재처리가 멱등이 된다.
 # - ON CONFLICT ... WHERE: 값이 그대로면 UPDATE하지 않는다 → aggregated_at이 괜히 바뀌지 않고,
 #   rowcount가 "실제로 바뀐 행 수"가 된다.
+# - vwap: numeric 나눗셈은 피연산자 자릿수로 정한 소수 자리(여기선 12자리)에서 한 번 반올림한다.
+#   그 값을 다시 8자리로 반올림하면 이중 반올림으로 마지막 자리가 1 틀릴 수 있다
+#   (…264|4999… → …2645000 → …265). 소수 20자리로 나눈 뒤 8자리로 반올림한다.
 SQL = """
 INSERT INTO {table} (asset_id, bucket, {columns}, aggregated_at)
 SELECT asset_id, bucket,
        any_value(first_open), max(high), min(low), any_value(last_close),
        sum(volume), sum(value),
-       round(sum(value) / NULLIF(sum(volume), 0), 8),
+       round(sum(value)::numeric(50, 20) / NULLIF(sum(volume), 0), 8),
        stddev_samp(ln(close::float8 / prev_close::float8)),
        count(*), %(version)s, now()
 FROM (

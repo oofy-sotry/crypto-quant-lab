@@ -63,6 +63,17 @@ def test_aggregate_minutes_hourly_values(btc, three_minutes):
 
 
 @pytest.mark.django_db
+def test_aggregate_minutes_vwap_rounds_once(btc):
+    # 실제 BTC 2026-06-08 11시 합계. 참값 95288369.26067264|4999… → 8자리 반올림은 …264.
+    # 나눗셈 결과(소수 12자리 …2645000)를 다시 반올림하면 …265가 된다(이중 반올림).
+    minute(btc, DAY, "1", "1", "1", "1", vol="55.07139608", val="5247663525.37180000")
+
+    aggregate_minutes(btc, "hour", DAY, DAY + timedelta(hours=1))
+
+    assert HourlyBar.objects.get(asset=btc).vwap == Decimal("95288369.26067264")
+
+
+@pytest.mark.django_db
 def test_aggregate_minutes_single_minute_bucket_has_no_volatility(btc, three_minutes):
     aggregate_minutes(btc, "hour", DAY, DAY + timedelta(days=1))
 
