@@ -110,6 +110,26 @@ def reprocess_aggregates(asset, start: date, end: date, client=None) -> Result:
     return Result(before, count_daily(), changed, diff)
 
 
+# 원본에 없어서 지울 행이 기간 안 기존 행의 이 비율을 넘으면 원본 응답이 덜 온 것으로 보고 멈춘다.
+# 업비트가 과거 봉을 대량으로 없애는 일은 사실상 없고,
+# 빈 응답·잘린 페이지를 그대로 믿으면 기간 전체가 삭제된다.
+MAX_DELETE_RATIO = 0.1
+
+
+class SourceLooksIncomplete(Exception):
+    """원본 응답이 비었거나 너무 많은 행을 지우게 돼서 반영을 거부함(트랜잭션 전체 롤백)."""
+
+
+def guard_deletions(existing: dict, fresh: dict, deleted: list) -> None:
+    if existing and not fresh:
+        raise SourceLooksIncomplete(f"원본이 비어 있습니다(기존 {len(existing):,}행).")
+    if existing and len(deleted) / len(existing) > MAX_DELETE_RATIO:
+        raise SourceLooksIncomplete(
+            f"기존 {len(existing):,}행 중 {len(deleted):,}행을 지우게 됩니다"
+            f"({MAX_DELETE_RATIO:.0%} 초과). 원본 응답을 확인하세요."
+        )
+
+
 def compare(existing: dict, fresh: dict) -> dict[str, list]:
     """키 → 값 튜플 두 벌을 비교해 추가·변경·삭제할 키를 돌려준다.
 
@@ -138,6 +158,7 @@ def reprocess_minutes(asset, start: date, end: date, client=None) -> Result:
     fresh = {ts: tuple(getattr(bar, f) for f in VALUE_FIELDS) for ts, bar in fresh_bars.items()}
     existing = {row[0]: row[1:] for row in in_range.values_list("ts", *VALUE_FIELDS)}
     changes = compare(existing, fresh)
+    guard_deletions(existing, fresh, changes["deleted"])
 
     upsert_minute_candles(
         asset, [fresh_bars[ts] for ts in changes["inserted"] + changes["updated"]]
@@ -170,6 +191,7 @@ def reprocess_daily(asset, start: date, end: date, client=None) -> Result:
     }
     existing = {row[0]: row[1:] for row in in_range.values_list("date", *VALUE_FIELDS, "is_final")}
     changes = compare(existing, fresh)
+    guard_deletions(existing, fresh, changes["deleted"])
 
     upsert_candles(
         asset, [fresh_candles[d] for d in changes["inserted"] + changes["updated"]], today=today

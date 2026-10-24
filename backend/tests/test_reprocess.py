@@ -18,6 +18,7 @@ from market.models import (
     ReprocessRun,
 )
 from market.reprocess import (
+    SourceLooksIncomplete,
     lock_days,
     reprocess_aggregates,
     reprocess_daily,
@@ -343,13 +344,34 @@ def test_run_reprocess_rejects_while_same_period_is_running(btc):
 @pytest.mark.django_db
 def test_reprocess_daily_delete_only_bumps_data_version(btc):
     # 남은 행의 수집 시각은 그대로라 Max(collected_at)만으로는 바뀐 걸 모른다.
-    days = [DAY - timedelta(days=i) for i in range(3)]
+    days = [DAY - timedelta(days=i) for i in range(20)]  # 1개 삭제 = 5% (삭제 상한 10% 아래)
     upsert_candles(btc, [candle(d) for d in days], today=DAY + timedelta(days=1))
     version = data_version(btc)
 
     result = reprocess_daily(
-        btc, days[-1], DAY, client=FakeDailyClient([candle(DAY), candle(days[2])])
+        btc, days[-1], DAY, client=FakeDailyClient([candle(d) for d in days[1:]])
     )
 
     assert result.diff["dailycandle"]["deleted"] == 1
     assert data_version(btc) != version
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("keep_hours", [0, 21])  # 원본이 비었거나, 기간의 12.5%가 빠짐
+def test_reprocess_minutes_refuses_mass_delete_and_rolls_back(btc, keep_hours):
+    fill_minutes(btc, T0, T0 + timedelta(days=1))
+    source = [b for ts, b in source_from_db(btc).items() if ts < T0 + timedelta(hours=keep_hours)]
+
+    record = run(btc, FakeMinuteClient(source), dry_run=False)
+
+    assert record.status == ReprocessRun.Status.FAILED
+    assert "SourceLooksIncomplete" in record.error_message
+    assert MinuteCandle.objects.filter(asset=btc).count() == 1440  # 아무것도 안 지움
+
+
+@pytest.mark.django_db
+def test_reprocess_daily_refuses_empty_source(btc):
+    upsert_candles(btc, [candle(DAY)], today=DAY + timedelta(days=1))
+
+    with pytest.raises(SourceLooksIncomplete):
+        reprocess_daily(btc, DAY, DAY, client=FakeDailyClient([]))
