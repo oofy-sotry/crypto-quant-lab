@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from market.integrity import run_integrity_checks
+from market.integrity import run_integrity_checks, sync_issues
 from market.models import Asset, DailyCandle, IntegrityIssue
 
 TODAY = date(2026, 10, 10)
@@ -91,3 +91,27 @@ def test_auto_resolved_issue_reopens_when_problem_returns(btc):
 
     assert summary["reopened"] == 1
     assert IntegrityIssue.objects.get().resolved_at is None
+
+
+@pytest.mark.django_db
+def test_sync_issues_leaves_other_types_and_dates_alone(btc):
+    T = IntegrityIssue.Type
+    spike = IntegrityIssue.objects.create(
+        asset=btc, date=date(2026, 10, 5), type=T.SPIKE, severity="warning"
+    )
+    old_missing = IntegrityIssue.objects.create(
+        asset=btc, date=date(2026, 9, 1), type=T.MISSING, severity="error"
+    )
+    recent_missing = IntegrityIssue.objects.create(
+        asset=btc, date=date(2026, 10, 5), type=T.MISSING, severity="error"
+    )
+
+    # MISSING만, 10월만 검사했고 아무것도 못 찾음
+    summary = sync_issues(btc, [], [T.MISSING], dates=(date(2026, 10, 1), date(2026, 10, 31)))
+
+    assert summary == {"created": 0, "reopened": 0, "resolved": 1}
+    for issue in (spike, old_missing, recent_missing):
+        issue.refresh_from_db()
+    assert recent_missing.resolved_at is not None
+    assert spike.resolved_at is None  # 다른 유형
+    assert old_missing.resolved_at is None  # 검사하지 않은 기간

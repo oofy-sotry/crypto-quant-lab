@@ -95,14 +95,18 @@ def find_stale(latest_final: date | None, today: date, max_lag_days: int = 2) ->
     return [Finding(latest_final, Type.STALE, Severity.ERROR, {"lag_days": lag})]
 
 
-def run_integrity_checks(asset, today: date, run=None) -> dict:
-    """한 종목의 확정 일봉 전체를 검사하고 결과를 IntegrityIssue에 반영한다.
+DAILY_TYPES = [
+    Type.MISSING,
+    Type.OHLC_INVALID,
+    Type.NON_POSITIVE,
+    Type.ZERO_VOLUME,
+    Type.SPIKE,
+    Type.STALE,
+]
 
-    - 새로 발견: 생성
-    - 이미 있음: 내용 갱신, 자동 해결됐던 이슈면 다시 연다(사람이 note를 남긴 건 유지)
-    - 이번엔 발견 안 됨: 자동 해결 처리
-    같은 데이터로 여러 번 돌려도 결과가 같다(멱등).
-    """
+
+def run_integrity_checks(asset, today: date, run=None) -> dict:
+    """한 종목의 확정 일봉 전체를 검사하고 결과를 IntegrityIssue에 반영한다."""
     candles = list(asset.candles.filter(is_final=True).order_by("date"))
     if not candles:
         return {"created": 0, "reopened": 0, "resolved": 0}
@@ -114,8 +118,29 @@ def run_integrity_checks(asset, today: date, run=None) -> dict:
         *find_spikes(candles),
         *find_stale(candles[-1].date, today),
     ]
+    return sync_issues(asset, findings, DAILY_TYPES, run=run)
 
-    existing = {(i.date, i.type): i for i in asset.issues.all()}
+
+def sync_issues(
+    asset,
+    findings: list[Finding],
+    types: list[str],
+    run=None,
+    dates: tuple[date, date] | None = None,
+) -> dict:
+    """검사 결과를 IntegrityIssue에 반영한다.
+
+    - 새로 발견: 생성
+    - 이미 있음: 내용 갱신, 자동 해결됐던 이슈면 다시 연다(사람이 note를 남긴 건 유지)
+    - 이번엔 발견 안 됨: 자동 해결 처리
+    types(와 dates를 주면 그 기간)에 속한 기존 이슈만 대상으로 한다. 다른 검사가 만든 이슈나
+    이번에 검사하지 않은 기간의 이슈를 "이번엔 발견 안 됨"으로 잘못 해결하지 않기 위해서다.
+    같은 데이터로 여러 번 돌려도 결과가 같다(멱등).
+    """
+    issues = asset.issues.filter(type__in=types)
+    if dates is not None:
+        issues = issues.filter(date__range=dates)
+    existing = {(i.date, i.type): i for i in issues}
     found_keys = set()
     summary = {"created": 0, "reopened": 0, "resolved": 0}
     now = timezone.now()
