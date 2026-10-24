@@ -12,7 +12,12 @@ from django.db import connection
 
 from market.aggregates import MODELS, delete_orphan_aggregates, upsert_aggregates
 from market.integrity import run_minute_checks
-from market.models import DailyAgg
+from market.minutes import upsert_minute_candles
+from market.models import DailyAgg, MinuteCandle
+from market.upbit import UpbitClient
+
+VALUE_FIELDS = ["open", "high", "low", "close", "volume", "value"]
+DELETE_CHUNK = 5000  # IN 목록 하나에 넣는 키 수 (쿼리 파라미터 상한 65,535보다 충분히 작게)
 
 
 def lock_days(asset, start: date, end: date) -> bool:
@@ -98,3 +103,44 @@ def reprocess_aggregates(asset, start: date, end: date, client=None) -> Result:
     daily = diff["dailyagg"]
     changed = daily["inserted"] + daily["updated"] + daily["deleted"]
     return Result(before, count_daily(), changed, diff)
+
+
+def compare(existing: dict, fresh: dict) -> dict[str, list]:
+    """키 → 값 튜플 두 벌을 비교해 추가·변경·삭제할 키를 돌려준다.
+
+    Decimal은 자릿수 표기가 달라도(100 vs 100.00000000) 같은 값이면 같다고 본다.
+    """
+    return {
+        "inserted": sorted(fresh.keys() - existing.keys()),
+        "updated": sorted(k for k in fresh.keys() & existing.keys() if fresh[k] != existing[k]),
+        "deleted": sorted(existing.keys() - fresh.keys()),
+    }
+
+
+def reprocess_minutes(asset, start: date, end: date, client=None) -> Result:
+    """기간의 분봉을 업비트에서 다시 받아 DB와 비교하고, 다른 것만 추가·변경·삭제한 뒤 재집계한다.
+
+    업비트에 없는데 DB에 있는 분봉은 지운다(원본 기준으로 교체). 그래서 dry-run으로 먼저 확인한다.
+    """
+    client = client or UpbitClient()
+    range_start, range_end = utc_range(start, end)
+    in_range = MinuteCandle.objects.filter(asset=asset, ts__gte=range_start, ts__lt=range_end)
+
+    fresh_bars = {
+        bar.ts: bar
+        for bar in client.iter_minute_candles(asset.symbol, since=range_start, to=range_end)
+    }
+    fresh = {ts: tuple(getattr(bar, f) for f in VALUE_FIELDS) for ts, bar in fresh_bars.items()}
+    existing = {row[0]: row[1:] for row in in_range.values_list("ts", *VALUE_FIELDS)}
+    changes = compare(existing, fresh)
+
+    upsert_minute_candles(
+        asset, [fresh_bars[ts] for ts in changes["inserted"] + changes["updated"]]
+    )
+    for i in range(0, len(changes["deleted"]), DELETE_CHUNK):
+        in_range.filter(ts__in=changes["deleted"][i : i + DELETE_CHUNK]).delete()
+
+    aggregates = reprocess_aggregates(asset, start, end)
+    diff = {"minutecandle": summarize(changes, bucket_day), **aggregates.diff}
+    changed = sum(len(keys) for keys in changes.values())
+    return Result(len(existing), in_range.count(), changed, diff)

@@ -7,7 +7,8 @@ from django.db import connection, transaction
 
 from market.aggregates import aggregate_minutes
 from market.models import Asset, DailyAgg, HourlyBar, IntegrityIssue, MinuteCandle
-from market.reprocess import lock_days, reprocess_aggregates
+from market.reprocess import lock_days, reprocess_aggregates, reprocess_minutes
+from market.upbit import MinuteBar
 
 DAY = date(2026, 10, 20)
 T0 = datetime(2026, 10, 20, tzinfo=UTC)
@@ -118,3 +119,62 @@ def test_reprocess_aggregates_twice_changes_nothing(btc):
     assert first.changed == 1
     assert second.changed == 0
     assert second.diff["hourlybar"] == {"inserted": 0, "updated": 0, "deleted": 0, "dates": {}}
+
+
+class FakeMinuteClient:
+    """DB의 분봉을 "업비트 원본"으로 본떠 돌려준다. 원본 쪽을 고쳐 차이를 만든다."""
+
+    def __init__(self, bars):
+        self.bars = sorted(bars, key=lambda b: b.ts, reverse=True)
+
+    def iter_minute_candles(self, market, since, to=None):
+        for b in self.bars:
+            if b.ts >= since and (to is None or b.ts < to):
+                yield b
+
+
+def source_from_db(asset):
+    fields = ["ts", "open", "high", "low", "close", "volume", "value"]
+    return {
+        row["ts"]: MinuteBar(**row)
+        for row in MinuteCandle.objects.filter(asset=asset).values(*fields)
+    }
+
+
+@pytest.mark.django_db
+def test_reprocess_minutes_applies_only_differences(btc):
+    fill_minutes(btc, T0, T0 + timedelta(days=1))
+    reprocess_aggregates(btc, DAY, DAY)
+    source = source_from_db(btc)
+    # DB에서 1시간 사라짐(원본엔 있음), 원본 한 분 값이 바뀜, DB에만 있는 분 하나
+    MinuteCandle.objects.filter(
+        asset=btc, ts__gte=T0 + timedelta(hours=3), ts__lt=T0 + timedelta(hours=4)
+    ).delete()
+    changed_ts = T0 + timedelta(hours=10)
+    source[changed_ts] = MinuteBar(**{**source[changed_ts].__dict__, "close": Decimal("100.5"),
+                                      "high": Decimal("100.5")})  # fmt: skip
+    extra_ts = T0 + timedelta(hours=11)
+    del source[extra_ts]
+
+    result = reprocess_minutes(btc, DAY, DAY, client=FakeMinuteClient(source.values()))
+
+    minutes = result.diff["minutecandle"]
+    assert (minutes["inserted"], minutes["updated"], minutes["deleted"]) == (60, 1, 1)
+    assert (result.rows_before, result.rows_after, result.changed) == (1380, 1439, 62)
+    assert MinuteCandle.objects.get(asset=btc, ts=changed_ts).close == Decimal("100.5")
+    assert not MinuteCandle.objects.filter(asset=btc, ts=extra_ts).exists()
+    # 이어서 재집계: 일봉 1개 갱신(거래량 바뀜)
+    assert result.diff["dailyagg"]["updated"] == 1
+    assert DailyAgg.objects.get(asset=btc).minute_count == 1439
+
+
+@pytest.mark.django_db
+def test_reprocess_minutes_same_source_changes_nothing(btc):
+    fill_minutes(btc, T0, T0 + timedelta(days=1))
+    reprocess_aggregates(btc, DAY, DAY)
+    client = FakeMinuteClient(source_from_db(btc).values())
+
+    result = reprocess_minutes(btc, DAY, DAY, client=client)
+
+    assert result.changed == 0
+    assert result.diff["dailyagg"]["updated"] == 0
