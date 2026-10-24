@@ -1,6 +1,6 @@
 """분봉 → 시간봉·일봉 집계. 수백만 행을 파이썬으로 옮기지 않도록 DB 쿼리 한 문장으로 계산한다."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db import connection
 
@@ -98,3 +98,29 @@ def upsert_aggregates(
     with connection.cursor() as cursor:
         cursor.execute(_build_sql(model), params)
         return cursor.fetchall()
+
+
+STEP = {"hour": timedelta(hours=1), "day": timedelta(days=1)}
+
+# 분봉이 하나도 남지 않은 구간의 집계 행을 지운다. upsert만으로는 분봉이 사라진 구간의 옛 집계가
+# 그대로 남기 때문에, 재처리에서 [start, end)를 "다시 만든 결과로 교체"하려면 이 단계가 필요하다.
+DELETE_ORPHANS_SQL = """
+DELETE FROM {table} a
+WHERE a.asset_id = %(asset_id)s AND a.bucket >= %(start)s AND a.bucket < %(end)s
+  AND NOT EXISTS (
+      SELECT 1 FROM {minute_table} m
+      WHERE m.asset_id = a.asset_id AND m.ts >= a.bucket AND m.ts < a.bucket + %(step)s
+  )
+RETURNING a.bucket
+"""
+
+
+def delete_orphan_aggregates(asset: Asset, unit: str, start: datetime, end: datetime) -> list:
+    """[start, end)에서 분봉이 없는 구간의 집계 행을 지우고, 지운 구간 시작 시각들을 돌려준다."""
+    sql = DELETE_ORPHANS_SQL.format(
+        table=MODELS[unit]._meta.db_table, minute_table=MinuteCandle._meta.db_table
+    )
+    params = {"asset_id": asset.id, "start": start, "end": end, "step": STEP[unit]}
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        return [row[0] for row in cursor.fetchall()]

@@ -4,7 +4,12 @@ from decimal import Decimal
 
 import pytest
 
-from market.aggregates import AGG_VERSION, aggregate_minutes, upsert_aggregates
+from market.aggregates import (
+    AGG_VERSION,
+    aggregate_minutes,
+    delete_orphan_aggregates,
+    upsert_aggregates,
+)
 from market.models import Asset, DailyAgg, HourlyBar, MinuteCandle
 
 DAY = datetime(2026, 10, 22, tzinfo=UTC)
@@ -145,3 +150,31 @@ def test_upsert_aggregates_reports_inserted_and_updated_buckets(btc, three_minut
 
     # 바뀐 10시만, 새로 넣은 게 아니라 고친 것으로
     assert upsert_aggregates(btc, "hour", DAY, DAY + timedelta(days=1)) == [(ten, False)]
+
+
+@pytest.mark.django_db
+def test_delete_orphan_aggregates_removes_only_buckets_without_minutes(btc, three_minutes):
+    aggregate_minutes(btc, "hour", DAY, DAY + timedelta(days=1))
+    eth = Asset.objects.get(symbol="KRW-ETH")
+    minute(eth, DAY.replace(hour=10), "5", "5", "5", "5")
+    aggregate_minutes(eth, "hour", DAY, DAY + timedelta(days=1))
+    MinuteCandle.objects.filter(asset=btc, ts=DAY.replace(hour=10)).delete()
+
+    deleted = delete_orphan_aggregates(btc, "hour", DAY, DAY + timedelta(days=1))
+
+    assert deleted == [DAY.replace(hour=10)]
+    assert list(HourlyBar.objects.filter(asset=btc).values_list("bucket", flat=True)) == [
+        DAY.replace(hour=9)
+    ]
+    assert HourlyBar.objects.filter(asset=eth).count() == 1  # 다른 종목은 그대로
+
+
+@pytest.mark.django_db
+def test_delete_orphan_aggregates_respects_range(btc, three_minutes):
+    aggregate_minutes(btc, "day", DAY, DAY + timedelta(days=1))
+    MinuteCandle.objects.filter(asset=btc).delete()
+
+    assert (
+        delete_orphan_aggregates(btc, "day", DAY + timedelta(days=1), DAY + timedelta(days=2)) == []
+    )
+    assert delete_orphan_aggregates(btc, "day", DAY, DAY + timedelta(days=1)) == [DAY]
