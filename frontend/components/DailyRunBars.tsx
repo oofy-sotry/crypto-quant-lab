@@ -1,5 +1,5 @@
 import type { CollectionRun } from "@/lib/api";
-import { RUN_STATE_TEXT, runState, TRIGGER_TEXT, kstDate } from "@/lib/runs";
+import { DAILY_CRON_TEXT, dailyCronPending, RUN_STATE_TEXT, runState, TRIGGER_TEXT, kstDate } from "@/lib/runs";
 import { RUN_STATE_BG } from "@/components/RunTable";
 
 const DAYS = 14;
@@ -27,10 +27,9 @@ export function DailyRunBars({ runs, now }: { runs: CollectionRun[]; now: number
 
   const regular = runs.filter((r) => r.trigger !== "backfill").map((r) => r.upserted_count);
   const scale = Math.max(1, ...regular);
-  // Cron은 09시대에 돈다. 오늘 10시 전이면 아직 안 돈 게 정상이고, 그 뒤에도 없으면 빠진 날이다.
+  // 오늘 Cron이 돌 시간(KST 10:30)이 안 지났으면 기록이 없어도 정상이고, 그 뒤에도 없으면 빠진 날이다.
   const today = kstDate(now);
-  const kstHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", hour: "numeric", hourCycle: "h23" }).format(now));
-  const pendingToday = kstHour < 10;
+  const pendingToday = dailyCronPending(now);
 
   return (
     <div className="flex items-end gap-1.5 overflow-x-auto pb-1">
@@ -43,7 +42,7 @@ export function DailyRunBars({ runs, now }: { runs: CollectionRun[]; now: number
         const title = last
           ? dayRuns.map((r) => `${TRIGGER_TEXT[r.trigger]} ${RUN_STATE_TEXT[runState(r, now)]} ${r.upserted_count}건`).join(", ")
           : day === today && pendingToday
-            ? "오늘 수집 전(매일 09시대)"
+            ? `오늘 수집 전(${DAILY_CRON_TEXT})`
             : "수집 없음";
         return (
           <div key={day} className="flex w-9 shrink-0 flex-col items-center gap-1" title={`${day}: ${title}`}>
