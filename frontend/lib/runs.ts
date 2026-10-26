@@ -18,8 +18,24 @@ export const TRIGGER_TEXT: Record<CollectionRun["trigger"], string> = {
   beat: "Celery",
 };
 
-// Cron은 하루 1번(무료 플랜이라 09시대 중 아무 때) 돈다. 하루 + 실행 시각 오차를 넘기면 경고.
+// 일봉 Cron 일정은 "30 0 * * *"(UTC 00:30)이고, 무료 플랜은 그 시각부터 59분 안 아무 때나 실행한다.
+// → KST 09:30~10:29. 하루 + 실행 시각 오차를 넘기면 경고.
+export const DAILY_CRON_TEXT = "매일 KST 09:30~10:29";
 export const STALE_HOURS = 26;
+
+/** 오늘 일봉 Cron이 아직 돌 수 있는 시각(KST 10:30 전)인지. 그 전에는 오늘 기록이 없어도 정상이다. */
+export function dailyCronPending(now: number): boolean {
+  const [hour, minute] = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+  })
+    .format(now)
+    .split(":")
+    .map(Number);
+  return hour * 60 + minute < 10 * 60 + 30;
+}
 
 // 함수 제한 시간(300초)보다 넉넉히 길게. 이보다 오래 running이면 함수가 강제 종료돼 상태를 못 바꾼 것이다.
 const STALLED_MINUTES = 10;
