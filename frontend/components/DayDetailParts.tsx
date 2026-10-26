@@ -29,7 +29,9 @@ export function HourlyBars({ hourly }: { hourly: DayDetail["hourly"] }) {
   );
 }
 
-const FIELDS: { key: keyof DayValues; label: string }[] = [
+type ValueKey = "open" | "high" | "low" | "close" | "volume" | "value"; // Decimal 문자열 필드
+
+const FIELDS: { key: ValueKey; label: string }[] = [
   { key: "open", label: "시가" },
   { key: "high", label: "고가" },
   { key: "low", label: "저가" },
@@ -37,6 +39,11 @@ const FIELDS: { key: keyof DayValues; label: string }[] = [
   { key: "volume", label: "거래량" },
   { key: "value", label: "거래대금" },
 ];
+
+/** "100.50000000" → "100.5", "100.00000000" → "100". 자릿수 표기만 다른 같은 값을 같은 문자열로 만든다. */
+function normalizeDecimal(value: string): string {
+  return value.includes(".") ? value.replace(/0+$/, "").replace(/\.$/, "") : value;
+}
 
 /** 분봉으로 만든 일봉 vs 업비트 일봉. 값은 문자열(Decimal) 그대로 비교·표시한다. */
 export function DayCompare({ agg, candle }: { agg: DayValues | null; candle: DayValues | null }) {
@@ -58,8 +65,9 @@ export function DayCompare({ agg, candle }: { agg: DayValues | null; candle: Day
           {FIELDS.map(({ key, label }) => {
             const a = agg?.[key];
             const c = candle?.[key];
-            // 문자열 자릿수가 달라도 같은 값이면 같다고 본다(100 vs 100.00000000).
-            const differs = a !== undefined && c !== undefined && Number(a) !== Number(c);
+            // Number()로 바꾸면 11자리 정수 + 소수 8자리(거래대금)가 float에 다 안 담겨 마지막 자리 차이를
+            // 놓친다(98903659326.47980000 === 98903659326.47980001). 문자열로 정리해 비교한다.
+            const differs = a !== undefined && c !== undefined && normalizeDecimal(a) !== normalizeDecimal(c);
             return (
               <tr key={key} className="border-b border-border last:border-0">
                 <td className="py-2 pr-2 text-muted">{label}</td>
