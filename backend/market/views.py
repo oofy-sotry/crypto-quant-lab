@@ -323,16 +323,26 @@ class OpsDayMatrixView(APIView):
 
     @extend_schema(
         operation_id="ops_days_matrix",
-        parameters=[OpenApiParameter("days", int, description="최근 며칠(기본 30, 최대 90)")],
+        parameters=[
+            OpenApiParameter(
+                "days",
+                int,
+                description="최근 며칠(기본 30, 최대 90, 분봉 보관 기간이 있으면 그 일수)",
+            )
+        ],
         responses=DayMatrixSerializer,
     )
     def get(self, request):
+        # 보관 기간보다 오래된 날은 분봉이 지워져 있어 "분봉 없음(수집 안 됨)"으로 잘못 보인다.
+        # 운영(30일 보관)에서는 보관 기간까지만 보여 준다. 끝날이 어제라 오늘-30일 = 보관되는 첫날.
+        retention = settings.MINUTE_RETENTION_DAYS
+        max_days = min(retention, OPS_MAX_DAYS) if retention > 0 else OPS_MAX_DAYS
         try:
             days = int(request.query_params.get("days", 30))
         except ValueError:
             days = 0
-        if not 1 <= days <= OPS_MAX_DAYS:
-            return Response({"detail": f"days는 1~{OPS_MAX_DAYS}"}, status=400)
+        if not 1 <= days <= max_days:
+            return Response({"detail": f"days는 1~{max_days}"}, status=400)
         end = current_trading_day() - timedelta(days=1)
         matrix = day_matrix(end - timedelta(days=days - 1), end)
         return Response(DayMatrixSerializer(matrix).data)

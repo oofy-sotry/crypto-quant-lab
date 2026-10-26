@@ -165,3 +165,13 @@ def test_ops_slow_queries_lists_recorded_entries(client, settings):
     assert [(e["path"], e["ms"], e["sql"]) for e in body] == [
         ("/api/minutes/", 400.0, "SELECT 느림")
     ]
+
+
+@pytest.mark.django_db
+def test_ops_days_limited_to_minute_retention(client, settings):
+    settings.MINUTE_RETENTION_DAYS = 30
+
+    assert client.get(reverse("ops-days"), {"days": 30}).status_code == 200
+    response = client.get(reverse("ops-days"), {"days": 31})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "days는 1~30"
