@@ -12,6 +12,7 @@ urlpatterns = [
     path("integrity/summary/", views.IntegritySummaryView.as_view(), name="integrity-summary"),
     path("integrity/issues/", views.IntegrityIssueListView.as_view(), name="integrity-issue-list"),
     path("cron/collect/", views.CronCollectView.as_view(), name="cron-collect"),
+    path("cron/minutes/", views.CronMinutesView.as_view(), name="cron-minutes"),
     path("reprocess/", views.ReprocessView.as_view(), name="reprocess"),
     path("reprocess/<int:pk>/", views.ReprocessDetailView.as_view(), name="reprocess-detail"),
 ]

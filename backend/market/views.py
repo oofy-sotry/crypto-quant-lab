@@ -16,6 +16,7 @@ from rest_framework.views import APIView
 
 from market.aggregates import MODELS
 from market.dashboard import revalidate_dashboard
+from market.minute_pipeline import run_minute_pipeline
 from market.models import (
     Asset,
     CollectionRun,
@@ -349,6 +350,16 @@ class CronCollectView(CronView):
     def after_success(self, run):
         # 새 데이터가 들어왔으니 대시보드가 이전 캐시를 보여 주지 않게 바로 갱신시킨다.
         revalidate_dashboard()
+
+
+class CronMinutesView(CronView):
+    """매일 분봉 파이프라인. 최근 2일 분봉 수집 → 집계 → 분봉 검사 → 보관 기간 지난 분봉 삭제.
+
+    일봉 Cron과 따로 둬서 한쪽 실패·지연이 다른 쪽에 번지지 않고 실행 시간도 따로 남는다.
+    """
+
+    def run(self):
+        return run_minute_pipeline(CollectionRun.Trigger.CRON)
 
 
 class ReprocessView(APIView):

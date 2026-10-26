@@ -135,3 +135,39 @@ def test_cron_collect_revalidates_dashboard_unless_failed(client, status, should
         client.get(URL, HTTP_AUTHORIZATION=f"Bearer {SECRET}")
 
     assert revalidate.called is should_revalidate
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [
+        (CollectionRun.Status.SUCCESS, 200),
+        (CollectionRun.Status.PARTIAL, 200),
+        (CollectionRun.Status.FAILED, 500),
+    ],
+)
+def test_cron_minutes_runs_pipeline_and_reports_status(client, status, code):
+    def run(trigger):
+        return CollectionRun.objects.create(
+            kind=CollectionRun.Kind.MINUTES, trigger=trigger, status=status
+        )
+
+    with (
+        patch("market.views.run_minute_pipeline", side_effect=run) as pipeline,
+        patch("market.views.revalidate_dashboard") as revalidate,
+    ):
+        response = client.get("/api/cron/minutes/", HTTP_AUTHORIZATION=f"Bearer {SECRET}")
+
+    assert response.status_code == code
+    pipeline.assert_called_once_with(CollectionRun.Trigger.CRON)
+    assert response.json()["kind"] == "minutes"
+    revalidate.assert_not_called()  # 대시보드 캐시는 일봉 수집 때만 갱신
+
+
+@pytest.mark.django_db
+def test_cron_minutes_rejects_bad_authorization(client):
+    with patch("market.views.run_minute_pipeline") as pipeline:
+        response = client.get("/api/cron/minutes/", HTTP_AUTHORIZATION="Bearer wrong")
+
+    assert response.status_code == 401
+    pipeline.assert_not_called()
