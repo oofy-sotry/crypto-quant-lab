@@ -1,5 +1,5 @@
 import hmac
-from datetime import UTC
+from datetime import UTC, date, timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -27,6 +27,7 @@ from market.models import (
     MinuteCandle,
     ReprocessRun,
 )
+from market.ops import day_detail, day_matrix
 from market.reprocess import run_reprocess
 from market.serializers import (
     AggBarSerializer,
@@ -35,6 +36,8 @@ from market.serializers import (
     CandleQuerySerializer,
     CandleSerializer,
     CollectionRunSerializer,
+    DayDetailSerializer,
+    DayMatrixSerializer,
     IntegrityIssueSerializer,
     IntegritySummarySerializer,
     MinuteCandleSerializer,
@@ -44,6 +47,7 @@ from market.serializers import (
     ReprocessRunSerializer,
 )
 from market.services import collect_candles
+from market.upbit import current_trading_day
 
 
 def bearer_matches(request, secret: str) -> bool:
@@ -303,6 +307,45 @@ class IntegritySummaryView(APIView):
                 "last_run": CollectionRunSerializer(last_run).data if last_run else None,
             }
         )
+
+
+OPS_MAX_DAYS = 90
+
+
+@extend_schema(
+    parameters=[OpenApiParameter("days", int, description="최근 며칠(기본 30, 최대 90)")],
+    responses=DayMatrixSerializer,
+)
+class OpsDayMatrixView(APIView):
+    """운영 콘솔: 활성 종목 × 최근 N일(마감된 UTC 날) 상태 표.
+
+    칸 상태는 error(미해결 오류) > no_minutes(분봉 없음) > not_aggregated(집계가 분봉과 다름)
+    > warning > ok 순으로 가장 심한 것 하나.
+    """
+
+    def get(self, request):
+        try:
+            days = int(request.query_params.get("days", 30))
+        except ValueError:
+            days = 0
+        if not 1 <= days <= OPS_MAX_DAYS:
+            return Response({"detail": f"days는 1~{OPS_MAX_DAYS}"}, status=400)
+        end = current_trading_day() - timedelta(days=1)
+        matrix = day_matrix(end - timedelta(days=days - 1), end)
+        return Response(DayMatrixSerializer(matrix).data)
+
+
+class OpsDayDetailView(APIView):
+    """운영 콘솔: 한 종목·하루 상세(분봉 수·빈 구간·시간대별 집계·일봉 대조·이슈·재처리 이력)."""
+
+    @extend_schema(responses=DayDetailSerializer)
+    def get(self, request, symbol: str, day: str):
+        asset = get_object_or_404(Asset, symbol=symbol)
+        try:
+            parsed = date.fromisoformat(day)
+        except ValueError:
+            return Response({"detail": "날짜는 YYYY-MM-DD"}, status=400)
+        return Response(DayDetailSerializer(day_detail(asset, parsed)).data)
 
 
 class CronView(APIView):

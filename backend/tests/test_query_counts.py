@@ -89,6 +89,7 @@ def data():
         ("integrity-issue-list", {}, 2),  # COUNT + 목록(종목은 JOIN)
         ("integrity-summary", {}, 3),  # 이슈 수 + 일봉 범위 + 마지막 수집
         ("collection-run-list", {}, 2),
+        ("ops-days", {"days": 30}, 6),  # 종목 + 테이블마다 GROUP BY 한 번(칸 수와 무관)
     ],
 )
 def test_list_api_query_count_is_fixed(
@@ -96,6 +97,14 @@ def test_list_api_query_count_is_fixed(
 ):
     with django_assert_num_queries(expected):
         response = client.get(reverse(name), query)
+
+    assert response.status_code == 200
+
+
+def test_ops_day_detail_query_count_is_fixed(client, data, django_assert_num_queries):
+    # 종목, 분봉 수, 빈 구간, 시간봉, 일 집계, 일봉, 이슈, 재처리 이력
+    with django_assert_num_queries(8):
+        response = client.get(reverse("ops-day", args=["KRW-BTC", "2026-10-22"]))
 
     assert response.status_code == 200
 
