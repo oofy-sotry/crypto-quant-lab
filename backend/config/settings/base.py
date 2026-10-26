@@ -15,6 +15,9 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 CRON_SECRET = env("CRON_SECRET", default="")
 # 재처리 API(POST /api/reprocess/)용 관리자 토큰. 비어 있으면 재처리 API는 모두 거부한다.
 ADMIN_API_TOKEN = env("ADMIN_API_TOKEN", default="")
+# 분봉 보관 일수. 분봉 Cron이 이보다 오래된 분봉을 지운다(집계 봉은 남김). 0이면 지우지 않는다.
+# 운영은 DB 용량(Neon 무료 0.5GB) 때문에 30, 로컬은 1년치 튜닝용 데이터를 두려고 0.
+MINUTE_RETENTION_DAYS = env.int("MINUTE_RETENTION_DAYS", default=0)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
