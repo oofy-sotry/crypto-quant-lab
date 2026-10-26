@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/backtest", label: "백테스트", match: (p: string) => p.startsWith("/backtest") },
   { href: "/integrity", label: "데이터 품질", match: (p: string) => p.startsWith("/integrity") },
   { href: "/status", label: "운영 상태", match: (p: string) => p.startsWith("/status") },
+  { href: "/ops", label: "운영 콘솔", match: (p: string) => p.startsWith("/ops") },
 ];
 
 export function Nav() {
