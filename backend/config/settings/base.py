@@ -18,6 +18,8 @@ ADMIN_API_TOKEN = env("ADMIN_API_TOKEN", default="")
 # 분봉 보관 일수. 분봉 Cron이 이보다 오래된 분봉을 지운다(집계 봉은 남김). 0이면 지우지 않는다.
 # 운영은 DB 용량(Neon 무료 0.5GB) 때문에 30, 로컬은 1년치 튜닝용 데이터를 두려고 0.
 MINUTE_RETENTION_DAYS = env.int("MINUTE_RETENTION_DAYS", default=0)
+# 이 시간(ms) 이상 걸린 쿼리는 경고 로그를 남기고 최근 목록(Redis)에 쌓는다(/api/ops/slow-queries/).
+SLOW_QUERY_MS = env.int("SLOW_QUERY_MS", default=200)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
