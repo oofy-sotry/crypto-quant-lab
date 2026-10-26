@@ -12,6 +12,7 @@ from market.models import (
     MinuteCandle,
     ReprocessRun,
 )
+from market.reprocess import retention_error
 from market.upbit import current_trading_day
 
 
@@ -183,6 +184,8 @@ class ReprocessRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"end는 마감된 날({today - timedelta(days=1)})까지만 가능합니다."
             )
+        if error := retention_error(attrs["target"], start, today):
+            raise serializers.ValidationError(error)
         max_days = self.MAX_DAYS[attrs["target"]]
         if (end - start).days + 1 > max_days:
             raise serializers.ValidationError(

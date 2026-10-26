@@ -66,3 +66,24 @@ def test_reprocess_request_requires_fields(field):
 @pytest.mark.django_db
 def test_reprocess_request_unknown_symbol():
     assert "symbol" in validate(symbol="KRW-NOPE").errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("target", "start", "ok"),
+    [
+        ("minutes", "2026-09-24", True),  # 오늘 10/24 - 30일 = 보관되는 가장 오래된 날
+        ("minutes", "2026-09-23", False),
+        ("aggregates", "2026-09-23", False),  # 집계 재처리는 남은 집계 봉을 지우게 된다
+        ("daily", "2026-09-23", True),  # 일봉은 보관 기간과 무관
+    ],
+)
+def test_reprocess_request_respects_minute_retention(settings, target, start, ok):
+    settings.MINUTE_RETENTION_DAYS = 30
+
+    s = validate(target=target, start=start)
+
+    if ok:
+        assert s.errors == {}
+    else:
+        assert "보관 기간(30일)" in str(s.errors["non_field_errors"][0])
