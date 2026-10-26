@@ -1,5 +1,6 @@
 // 운영 콘솔(종목×날짜 표, 재처리 이력) 표시 규칙.
 import type { DayStatus, ReprocessRun } from "@/lib/api";
+import { isStalled } from "@/lib/runs";
 
 export const DAY_STATUS_TEXT: Record<DayStatus, string> = {
   error: "오류",
@@ -49,14 +50,11 @@ export const REPROCESS_STATE_BG: Record<ReprocessState, string> = {
   stalled: "bg-error",
 };
 
-// 재처리 API는 서버리스 함수 제한(300초) 안에서 끝난다. 이보다 오래 running이면 함수가 강제 종료돼
+// 재처리 API는 서버리스 함수 제한(300초) 안에서 끝난다. 오래 running이면 함수가 강제 종료돼
 // 이력을 못 바꾼 것이다(트랜잭션은 롤백됨). 수집 기록과 같은 규칙.
-const STALLED_MINUTES = 10;
-
 export function reprocessState(run: ReprocessRun, now: number): ReprocessState {
   if (run.status !== "running") return run.status;
-  const minutes = (now - new Date(run.started_at).getTime()) / 60_000;
-  return minutes > STALLED_MINUTES ? "stalled" : "running";
+  return isStalled(run.started_at, now) ? "stalled" : "running";
 }
 
 /** 재처리 diff의 테이블 이름 → 화면 이름 */

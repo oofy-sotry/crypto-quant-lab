@@ -24,11 +24,15 @@ export const STALE_HOURS = 26;
 // 함수 제한 시간(300초)보다 넉넉히 길게. 이보다 오래 running이면 함수가 강제 종료돼 상태를 못 바꾼 것이다.
 const STALLED_MINUTES = 10;
 
+/** running으로 시작한 지 STALLED_MINUTES가 넘었는지. 수집 기록·재처리 이력이 같은 규칙을 쓴다. */
+export function isStalled(startedAt: string, now: number): boolean {
+  return (now - new Date(startedAt).getTime()) / 60_000 > STALLED_MINUTES;
+}
+
 /** running으로 남아 있지만 실제로는 끝난(강제 종료된) 실행을 "중단됨"으로 본다. */
 export function runState(run: CollectionRun, now: number = Date.now()): RunState {
   if (run.status !== "running") return run.status;
-  const minutes = (now - new Date(run.started_at).getTime()) / 60_000;
-  return minutes > STALLED_MINUTES ? "stalled" : "running";
+  return isStalled(run.started_at, now) ? "stalled" : "running";
 }
 
 /** 실행에 걸린 시간(초). 끝나지 않았으면 null. */
