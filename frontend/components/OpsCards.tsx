@@ -18,7 +18,7 @@ function Card({ label, tone, value, children }: { label: string; tone: Tone; val
 
 const SERVICE_TEXT: Record<string, string> = { database: "DB (PostgreSQL)", cache: "Redis" };
 
-/** 운영 상태 화면 위쪽 카드 3개: 서버 의존 서비스, 마지막 자동 수집, 최근 자동 수집 성공 일수 */
+/** 운영 상태 화면 위쪽 카드: 서버 의존 서비스, 마지막 자동 수집, 최근 자동 수집 성공 일수, 느린 쿼리 */
 export function OpsCards({ health, runs, now }: { health: Health | null; runs: CollectionRun[]; now: number }) {
   const lastCron = runs.find((r) => r.trigger === "cron");
   const hours = lastCron ? hoursSince(lastCron.started_at, now) : Infinity;
@@ -33,7 +33,7 @@ export function OpsCards({ health, runs, now }: { health: Health | null; runs: C
   const okDays = week.filter((d) => cronDays.has(d)).length;
 
   return (
-    <section className="grid gap-3 sm:grid-cols-3">
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Card label="API 서버" tone={!health ? "error" : health.status === "ok" ? "ok" : "error"} value={!health ? "응답 없음" : health.status === "ok" ? "정상" : "장애"}>
         {health ? (
           <ul className="flex flex-col gap-0.5">
@@ -72,6 +72,21 @@ export function OpsCards({ health, runs, now }: { health: Health | null; runs: C
       >
         하루 실패해도 다음 날 최근 7일을 다시 받아 빈 날을 메웁니다.
       </Card>
+      <SlowQueryCard health={health} />
     </section>
+  );
+}
+
+function SlowQueryCard({ health }: { health: Health | null }) {
+  const queries = health?.queries;
+  const count = queries?.slow_24h ?? null;
+  return (
+    <Card
+      label="느린 쿼리 (최근 24시간)"
+      tone={count === null ? "warn" : count === 0 ? "ok" : "warn"}
+      value={count === null ? "알 수 없음" : `${count}건`}
+    >
+      {queries ? `${queries.slow_threshold_ms}ms 이상 걸린 API 쿼리. 아래 목록에서 SQL을 봅니다.` : "health API에 쿼리 지표가 없습니다."}
+    </Card>
   );
 }
