@@ -304,17 +304,23 @@ class IntegritySummaryView(APIView):
         )
 
 
-class CronCollectView(APIView):
-    """Vercel Cron이 매일 호출하는 수집 엔드포인트. 최근 7일을 다시 받아 저장한다.
+class CronView(APIView):
+    """Vercel Cron 전용 엔드포인트 공통: 비밀값 확인 → run() → 결과 기록(CollectionRun)을 응답.
 
     `Authorization: Bearer <CRON_SECRET>` 헤더가 맞아야 실행된다.
-    `?sentry_test=1`이면 수집 대신 일부러 예외를 내서 Sentry 연동을 확인한다.
+    `?sentry_test=1`이면 실행 대신 일부러 예외를 내서 Sentry 연동을 확인한다.
     """
 
     # 사용자 인증·Redis throttle과 무관하게 비밀값 하나로만 판단한다.
     authentication_classes = []
     permission_classes = []
     throttle_classes = []
+
+    def run(self) -> CollectionRun:
+        raise NotImplementedError
+
+    def after_success(self, run: CollectionRun) -> None:
+        """전부 실패가 아닐 때 실행 뒤에 할 일."""
 
     # Vercel Cron 전용 내부 엔드포인트라 공개 API 문서(Swagger)에는 싣지 않는다.
     @extend_schema(exclude=True)
@@ -325,14 +331,24 @@ class CronCollectView(APIView):
         if request.query_params.get("sentry_test") == "1":
             raise RuntimeError("Sentry 연동 확인용 의도적 오류")
 
-        run = collect_candles(CollectionRun.Trigger.CRON)
+        run = self.run()
         # 전 종목 실패면 Vercel Cron 기록에도 실패로 남도록 500을 돌려준다.
-        # 일부 실패(partial)는 다음 날 7일 재수집으로 메워지므로 200으로 둔다.
+        # 일부 실패(partial)는 다음 날 재수집으로 메워지므로 200으로 둔다.
         failed = run.status == CollectionRun.Status.FAILED
         if not failed:
-            # 새 데이터가 들어왔으니 대시보드가 이전 캐시를 보여 주지 않게 바로 갱신시킨다.
-            revalidate_dashboard()
+            self.after_success(run)
         return Response(CollectionRunSerializer(run).data, status=500 if failed else 200)
+
+
+class CronCollectView(CronView):
+    """매일 일봉 수집. 최근 7일을 다시 받아 저장하고 무결성 검사를 돌린다."""
+
+    def run(self):
+        return collect_candles(CollectionRun.Trigger.CRON)
+
+    def after_success(self, run):
+        # 새 데이터가 들어왔으니 대시보드가 이전 캐시를 보여 주지 않게 바로 갱신시킨다.
+        revalidate_dashboard()
 
 
 class ReprocessView(APIView):
