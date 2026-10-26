@@ -13,8 +13,19 @@ def test_capture_queries_counts_queries_and_time():
         list(Asset.objects.all())
 
     assert log.count == 2
-    assert "COUNT" in log.queries[0][0]
+    assert "COUNT" in log.queries[0].sql
     assert log.total_ms > 0
+
+
+def test_capture_queries_keeps_params_for_rerun():
+    with capture_queries() as log:
+        Asset.objects.filter(symbol="KRW-BTC").exists()
+
+    query = log.queries[0]
+    assert "KRW-BTC" in query.params
+    with connection.cursor() as cursor:  # 같은 문장을 그대로 다시 실행할 수 있다
+        cursor.execute(query.sql, query.params)
+        assert cursor.fetchone() is not None
 
 
 def test_capture_queries_records_failed_query():

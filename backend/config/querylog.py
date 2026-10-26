@@ -12,17 +12,24 @@ from django.db import connection
 
 
 @dataclass
-class QueryLog:
-    """execute_wrapper로 끼워 넣으면 쿼리마다 (SQL, 걸린 초)를 쌓는다."""
+class Query:
+    sql: str
+    params: object  # 같은 문장을 다시 실행(EXPLAIN)할 수 있게 그대로 둔다
+    seconds: float
 
-    queries: list[tuple[str, float]] = field(default_factory=list)
+
+@dataclass
+class QueryLog:
+    """execute_wrapper로 끼워 넣으면 실행된 쿼리를 차례로 쌓는다."""
+
+    queries: list[Query] = field(default_factory=list)
 
     def __call__(self, execute, sql, params, many, context):
         start = time.perf_counter()
         try:
             return execute(sql, params, many, context)
         finally:
-            self.queries.append((sql, time.perf_counter() - start))
+            self.queries.append(Query(sql, params, time.perf_counter() - start))
 
     @property
     def count(self) -> int:
@@ -30,7 +37,7 @@ class QueryLog:
 
     @property
     def total_ms(self) -> float:
-        return sum(seconds for _, seconds in self.queries) * 1000
+        return sum(q.seconds for q in self.queries) * 1000
 
 
 @contextmanager
