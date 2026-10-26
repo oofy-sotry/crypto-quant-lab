@@ -39,3 +39,19 @@ def capture_queries():
     log = QueryLog()
     with connection.execute_wrapper(log):
         yield log
+
+
+class QueryTimingMiddleware:
+    """응답에 `Server-Timing: db;dur=<ms>;desc="<n> queries"` 헤더를 붙인다.
+
+    브라우저 개발자 도구(Network → Timing)와 curl -I로 요청당 쿼리 수·DB 시간을 바로 본다.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        with capture_queries() as log:
+            response = self.get_response(request)
+        response["Server-Timing"] = f'db;dur={log.total_ms:.1f};desc="{log.count} queries"'
+        return response
