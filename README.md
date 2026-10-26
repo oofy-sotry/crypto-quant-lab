@@ -142,6 +142,19 @@ python manage.py reprocess --asset KRW-BTC --target minutes \
   --start 2026-09-10 --end 2026-09-10 --reason "분봉 누락 복구"           # dry-run, --apply를 주면 반영
 ```
 
+### 5. 쿼리·인덱스 튜닝 (v2, 자세한 기록: [docs/performance.md](docs/performance.md))
+
+같은 로컬 1년치 데이터에서, 시나리오 9개를 실제 API·검사 코드로 실행하고 SQL마다 `EXPLAIN (ANALYZE, BUFFERS)`를 워밍업 1회 + 5회 이상 중앙값으로 쟀습니다(`manage.py explain_scenarios`). 모든 응답에는 요청당 쿼리 수·DB 시간이 `Server-Timing` 헤더로 붙습니다(`connection.execute_wrapper`).
+
+| 시나리오 | 전 → 후 (요청 시간) | 바꾼 것 |
+|---|---|---|
+| 종목별 최신 상태 | 613ms → 7ms (쿼리 4 → 1) | `GROUP BY` + `Max`(260만 행 Seq Scan) → 종목별 `ORDER BY ts DESC LIMIT 1` 서브쿼리(인덱스 끝 한 칸) |
+| 분봉 목록 깊은 페이지 | 213ms → 45ms (DB 164 → 0.3ms) | 페이지 번호(매번 52만 행 `COUNT` + `OFFSET`) → keyset 페이지네이션 |
+
+- **새 인덱스는 넣지 않았습니다.** 기존 unique(asset_id, ts)에 대해 커버링(`INCLUDE`), 순서 반대(ts, asset_id), BRIN, 부분 인덱스를 트랜잭션 안에서 만들어 재고 롤백했습니다. 커버링은 크기 2.7배에 2ms 이득, (ts, asset_id)는 앱 쿼리가 오히려 느려짐(종목 조건 없는 쿼리도 PostgreSQL 18 skip scan이 기존 인덱스를 씀), BRIN은 upsert·재처리로 물리 순서가 섞여(`correlation` −0.08) 5배 느렸습니다.
+- 인덱스 부풀림도 찾았습니다. 같은 행으로 새로 만든 인덱스가 절반 크기(151MB → 78MB)여서, 대량 재적재 뒤 `REINDEX CONCURRENTLY`를 운영 절차로 남겼습니다.
+- 조회 API 9개의 요청당 쿼리 수를 테스트로 고정해 N+1이 생기면 실패하게 했습니다.
+
 ## API
 
 | 메서드 | 경로 | 설명 |
