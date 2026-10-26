@@ -9,7 +9,8 @@ from market.models import Asset, MinuteCandle
 from market.upbit import MinuteBar, UpbitClient
 
 UPDATE_FIELDS = ["open", "high", "low", "close", "volume", "value"]
-# 한 INSERT 문에 담는 행 수. 배치 크기별 적재 속도를 재서 정한다(docs/performance.md).
+# 한 INSERT 문에 담는 행 수. 500/2000/5000을 재서 2000이 가장 빨랐다(docs/ROADMAP.md D2,
+# bench_minute_upsert 커맨드).
 BATCH_SIZE = 2000
 
 
