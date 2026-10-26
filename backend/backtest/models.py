@@ -8,7 +8,8 @@ class BacktestRun(models.Model):
     # 요청 파라미터(정규화된 형태)와 그 해시. 같은 요청은 같은 해시가 된다.
     params = models.JSONField()
     params_hash = models.CharField(max_length=64)
-    # 계산에 쓴 데이터의 버전(종목의 마지막 수집 시각). 데이터가 바뀌면 결과도 새로 계산한다.
+    # 계산에 쓴 데이터의 버전(종목 일봉의 "마지막 수집 시각:행 수", services.data_version).
+    # 데이터가 바뀌면(추가·변경·삭제) 버전이 바뀌어 결과를 새로 계산한다.
     data_version = models.CharField(max_length=40)
     metrics = models.JSONField()  # 전략 지표
     benchmark = models.JSONField()  # 같은 기간 Buy&Hold 지표
