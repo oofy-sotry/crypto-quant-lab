@@ -91,3 +91,18 @@ def test_reprocess_command_rejects_unfinished_day():
         run()  # --end 2026-10-21 = 진행 중인 날
 
     assert not ReprocessRun.objects.exists()
+
+
+@pytest.mark.django_db
+def test_reprocess_command_rejects_days_outside_minute_retention(settings):
+    settings.MINUTE_RETENTION_DAYS = 30
+    with (
+        patch(
+            "market.management.commands.reprocess.current_trading_day",
+            return_value=date(2026, 11, 30),  # 보관되는 가장 오래된 날 = 10/31
+        ),
+        pytest.raises(CommandError, match=r"보관 기간\(30일\)"),
+    ):
+        run()
+
+    assert not ReprocessRun.objects.exists()
