@@ -14,9 +14,9 @@ from django.utils import timezone
 
 from market.aggregates import MODELS, aggregate_minutes, delete_orphan_aggregates
 from market.integrity import run_minute_checks
-from market.minutes import collect_minutes
+from market.minutes import upsert_minute_candles
 from market.models import Asset, CollectionRun, MinuteCandle
-from market.reprocess import Rejected, lock_days
+from market.reprocess import VALUE_FIELDS, Rejected, compare, lock_days
 from market.upbit import UpbitClient
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,29 @@ RECENT_DAYS = 2
 
 def utc_midnight(dt: datetime) -> datetime:
     return dt.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def save_changed_minutes(asset, bars, start: datetime, end: datetime) -> dict[str, int]:
+    """[start, end) 분봉 중 새로 생기거나 값이 바뀐 것만 저장하고 개수를 돌려준다.
+
+    값이 같은 분봉까지 ON CONFLICT DO UPDATE로 다시 쓰면 매일 약 1.4만 행이 새 행 버전이 된다.
+    페이지에 빈자리가 없어 HOT 갱신이 거의 안 되므로(로컬 실측 0.9%) 죽은 행과 인덱스 항목이
+    그만큼 쌓인다(D5에서 찾은 인덱스 부풀림과 같은 원인). 원본에 없는 분봉은 지우지 않는다
+    (원본이 덜 왔을 때의 대량 삭제를 막는 장치는 재처리에 있다).
+    """
+    fresh_bars = {b.ts: b for b in bars}
+    fresh = {ts: tuple(getattr(b, f) for f in VALUE_FIELDS) for ts, b in fresh_bars.items()}
+    existing = {
+        row[0]: row[1:]
+        for row in MinuteCandle.objects.filter(asset=asset, ts__gte=start, ts__lt=end).values_list(
+            "ts", *VALUE_FIELDS
+        )
+    }
+    changes = compare(existing, fresh)
+    upsert_minute_candles(
+        asset, [fresh_bars[ts] for ts in changes["inserted"] + changes["updated"]]
+    )
+    return {"inserted": len(changes["inserted"]), "updated": len(changes["updated"])}
 
 
 def delete_expired_minutes(now: datetime, keep_days: int) -> int:
@@ -63,6 +86,7 @@ def run_minute_pipeline(
         kind=CollectionRun.Kind.MINUTES, trigger=trigger, assets_count=len(assets)
     )
     timings: dict[str, float] = {}
+    written = {"inserted": 0, "updated": 0}
     errors = []
 
     def step(name: str, started: float):
@@ -76,11 +100,14 @@ def run_minute_pipeline(
             with transaction.atomic():
                 if not lock_days(asset, start.date(), last_day):
                     raise Rejected
-                saved = collect_minutes(asset, since=start, to=end, client=client)
+                bars = client.iter_minute_candles(asset.symbol, since=start, to=end)
+                saved = save_changed_minutes(asset, bars, start, end)
                 for unit in MODELS:
                     aggregate_minutes(asset, unit, start, end)
                     delete_orphan_aggregates(asset, unit, start, end)
-            run.upserted_count += saved
+            for kind, n in saved.items():
+                written[kind] += n
+            run.upserted_count += sum(saved.values())
         except Rejected:
             # 재처리가 끝나면 그 날은 이미 원본 기준으로 맞춰져 있고, 다음 날 Cron도 다시 본다.
             errors.append(f"{asset.symbol}: 같은 날짜의 재처리가 실행 중이라 건너뜀")
@@ -117,6 +144,7 @@ def run_minute_pipeline(
     run.detail = {
         "range": [start.date().isoformat(), last_day.isoformat()],
         "timings": timings,
+        "minutes": written,  # 새로 넣은 / 값이 바뀐 분봉 수(그대로인 분봉은 쓰지 않음)
         "deleted_minutes": deleted,
         "keep_days": keep_days,
         "checks": checks,

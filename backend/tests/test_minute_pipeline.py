@@ -74,9 +74,29 @@ def test_pipeline_is_idempotent():
     run_minute_pipeline("cron", client=client, now=NOW, keep_days=0)
     before = MinuteCandle.objects.count(), HourlyBar.objects.count()
 
-    run_minute_pipeline("cron", client=client, now=NOW, keep_days=0)
+    second = run_minute_pipeline("cron", client=client, now=NOW, keep_days=0)
 
     assert (MinuteCandle.objects.count(), HourlyBar.objects.count()) == before
+    assert second.upserted_count == 0  # 값이 같은 분봉은 다시 쓰지 않는다
+    assert second.detail["minutes"] == {"inserted": 0, "updated": 0}
+
+
+def test_pipeline_writes_only_new_or_changed_minutes():
+    bars = two_days()
+    run_minute_pipeline("cron", client=FakeClient(bars), now=NOW, keep_days=0)
+    btc = Asset.objects.get(symbol="KRW-BTC")
+    first = MinuteCandle.objects.get(asset=btc, ts=TODAY - timedelta(days=2))
+    stamp = MinuteCandle.objects.filter(asset=btc).order_by("ts")[1]
+    # 원본이 한 분을 정정하고(업비트 늦은 정정), 한 분은 DB에서 빠져 있었다고 하자.
+    changed = [bar(b.ts, 101) if b.ts == first.ts else b for b in bars]
+    stamp.delete()
+
+    run = run_minute_pipeline("cron", client=FakeClient(changed), now=NOW, keep_days=0)
+
+    # 정정은 5종목 모두(같은 원본), 빠진 분은 BTC 하나만
+    assert run.detail["minutes"] == {"inserted": 1, "updated": 5}
+    assert run.upserted_count == 6
+    assert MinuteCandle.objects.get(asset=btc, ts=first.ts).close == Decimal(101)
 
 
 def test_delete_expired_minutes_keeps_aggregates_and_recent_days():
