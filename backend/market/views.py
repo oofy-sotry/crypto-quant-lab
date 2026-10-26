@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils.timezone import is_naive
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.pagination import CursorPagination, PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -405,17 +405,38 @@ class CronMinutesView(CronView):
         return run_minute_pipeline(CollectionRun.Trigger.CRON)
 
 
-class ReprocessView(APIView):
-    """재처리 실행. 기본은 dry-run(바뀔 내용만 계산하고 롤백), `"dry_run": false`면 반영.
+@extend_schema(
+    methods=["GET"],
+    parameters=[
+        OpenApiParameter("symbol", str),
+        OpenApiParameter("date", str, description="이 날(YYYY-MM-DD)을 포함한 재처리만"),
+    ],
+)
+class ReprocessView(generics.ListAPIView):
+    """GET: 재처리 이력 목록(최신순, 공개). POST: 재처리 실행.
 
-    `Authorization: Bearer <ADMIN_API_TOKEN>` 헤더가 맞아야 실행된다.
-    같은 종목·기간(하루라도 겹침)이 실행 중이면 409, 실행 중 오류면 500(전부 롤백됨).
-    결과(거부·실패 포함)는 항상 이력으로 남고 응답 본문으로 돌려준다.
+    POST는 `Authorization: Bearer <ADMIN_API_TOKEN>` 헤더가 맞아야 실행된다. 기본은 dry-run
+    (바뀔 내용만 계산하고 롤백), `"dry_run": false`면 반영. 같은 종목·기간(하루라도 겹침)이
+    실행 중이면 409, 실행 중 오류면 500(전부 롤백됨). 결과(거부·실패 포함)는 항상 이력으로 남는다.
     """
 
     # 사용자 세션이 아니라 관리자 토큰 하나로만 판단한다(세션 인증이 없으니 CSRF도 해당 없음).
     authentication_classes = []
     permission_classes = []
+    serializer_class = ReprocessRunSerializer
+
+    def get_queryset(self):
+        runs = ReprocessRun.objects.select_related("asset")
+        params = self.request.query_params
+        if params.get("symbol"):
+            runs = runs.filter(asset__symbol=params["symbol"])
+        if params.get("date"):
+            try:
+                day = date.fromisoformat(params["date"])
+            except ValueError as exc:
+                raise ValidationError({"date": "YYYY-MM-DD"}) from exc
+            runs = runs.filter(start_date__lte=day, end_date__gte=day)
+        return runs
 
     STATUS_CODES = {
         ReprocessRun.Status.SUCCESS: 201,

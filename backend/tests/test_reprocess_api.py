@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from market.models import ReprocessRun
+from market.models import Asset, ReprocessRun
 from market.reprocess import Result
 
 URL = "/api/reprocess/"
@@ -119,3 +119,29 @@ def test_reprocess_api_validates_period(client):
 @pytest.mark.django_db
 def test_reprocess_detail_404(client):
     assert client.get(f"{URL}999/").status_code == 404
+
+
+@pytest.mark.django_db
+def test_reprocess_list_is_public_and_filters_by_symbol_and_covered_date(client):
+    btc = Asset.objects.get(symbol="KRW-BTC")
+    eth = Asset.objects.get(symbol="KRW-ETH")
+    common = {"target": "aggregates", "dry_run": True, "reason": "r", "requested_by": "u"}
+    ReprocessRun.objects.create(
+        asset=btc, start_date=date(2026, 10, 1), end_date=date(2026, 10, 5), **common
+    )
+    ReprocessRun.objects.create(
+        asset=btc, start_date=date(2026, 10, 10), end_date=date(2026, 10, 10), **common
+    )
+    ReprocessRun.objects.create(
+        asset=eth, start_date=date(2026, 10, 3), end_date=date(2026, 10, 3), **common
+    )
+
+    def ids(**query):
+        response = client.get("/api/reprocess/", query)  # 토큰 없이 조회
+        assert response.status_code == 200
+        return [(r["symbol"], r["start_date"]) for r in response.json()["results"]]
+
+    assert len(ids()) == 3
+    assert ids(symbol="KRW-BTC", date="2026-10-03") == [("KRW-BTC", "2026-10-01")]
+    assert ids(date="2026-10-03") == [("KRW-ETH", "2026-10-03"), ("KRW-BTC", "2026-10-01")]
+    assert client.get("/api/reprocess/", {"date": "어제"}).status_code == 400

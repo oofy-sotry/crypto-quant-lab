@@ -90,6 +90,7 @@ def data():
         ("integrity-summary", {}, 3),  # 이슈 수 + 일봉 범위 + 마지막 수집
         ("collection-run-list", {}, 2),
         ("ops-days", {"days": 30}, 6),  # 종목 + 테이블마다 GROUP BY 한 번(칸 수와 무관)
+        ("reprocess", {}, 2),  # COUNT + 목록(종목은 JOIN)
     ],
 )
 def test_list_api_query_count_is_fixed(
