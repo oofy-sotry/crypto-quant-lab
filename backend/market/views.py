@@ -302,7 +302,8 @@ class IntegritySummaryView(APIView):
             }
             for a in candle_ranges
         ]
-        last_run = CollectionRun.objects.first()
+        # 일봉 수집 기준(이 요약의 일봉 범위와 같은 대상). 분봉은 ?kind=minutes로 따로 본다.
+        last_run = CollectionRun.objects.filter(kind=CollectionRun.Kind.DAILY).first()
         return Response(
             {
                 "assets": assets,

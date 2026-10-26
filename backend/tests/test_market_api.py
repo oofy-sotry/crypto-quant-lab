@@ -122,3 +122,14 @@ def test_collection_runs_filter_by_kind_and_include_detail(client):
     assert len(everything) == 2
     assert [(r["kind"], r["detail"]) for r in minutes] == [("minutes", {"deleted_minutes": 7200})]
     assert [r["kind"] for r in daily] == ["daily"]  # 기존 기록은 daily
+
+
+@pytest.mark.django_db
+def test_integrity_summary_last_run_is_latest_daily_collection(client):
+    daily = CollectionRun.objects.create(trigger="cron")
+    CollectionRun.objects.create(kind=CollectionRun.Kind.MINUTES, trigger="cron")  # 더 최근
+
+    body = client.get(reverse("integrity-summary")).json()
+
+    # 홈의 "마지막 수집"은 일봉 수집 기준이다(분봉 파이프라인은 운영 상태 화면에 따로 나옴).
+    assert (body["last_run"]["id"], body["last_run"]["kind"]) == (daily.id, "daily")
