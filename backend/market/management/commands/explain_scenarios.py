@@ -17,6 +17,7 @@ from market.views import (
     IntegrityIssueListView,
     MinuteCandleListView,
     MinuteStatusView,
+    OpsDayMatrixView,
 )
 
 SYMBOL = "KRW-BTC"
@@ -77,6 +78,8 @@ SCENARIOS = {
     # 4. 결측 구간 탐지 (재처리 상한 31일, 1년 전체)
     "gaps_31d": lambda: gaps(31),
     "gaps_year": lambda: gaps(365),
+    # 6. 운영 콘솔 종목×날짜 표(최근 30일, D6)
+    "ops_matrix": lambda: api(OpsDayMatrixView, "/api/ops/days/"),
     # 5. 미해결 이슈 목록
     "open_issues": lambda: api(IntegrityIssueListView, "/api/integrity/issues/", resolved="false"),
 }
