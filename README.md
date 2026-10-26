@@ -1,12 +1,12 @@
 # crypto-quant-lab
 
-업비트 코인 일봉을 매일 수집하고, 데이터 무결성을 검사한 뒤, pandas로 전략을 백테스트해 REST API와 대시보드로 제공하는 프로젝트입니다.
+업비트 코인 일봉·1분봉을 매일 수집하고, 데이터 무결성과 두 원본 사이 정합성을 검사한 뒤, pandas로 전략을 백테스트해 REST API와 대시보드로 제공하는 프로젝트입니다. 운영 콘솔에서 종목·날짜별 수집·집계·검사 상태와 재처리 이력을 봅니다.
 
 ```
-업비트 공개 API → 일봉 수집(매일 Cron) → 무결성 검사 → pandas 백테스트 → DRF API (+ Redis 캐시) → Next.js 대시보드
+업비트 공개 API → 일봉·분봉 수집(매일 Cron) → 집계·무결성·정합성 검사 → pandas 백테스트 → DRF API (+ Redis 캐시) → Next.js 대시보드·운영 콘솔
 ```
 
-- **대시보드:** https://crypto-quant-dashboard-oofysotry.vercel.app (홈·가격 차트·백테스트·데이터 품질·운영 상태)
+- **대시보드:** https://crypto-quant-dashboard-oofysotry.vercel.app (홈·가격 차트·백테스트·데이터 품질·운영 상태·운영 콘솔)
 - **운영 API:** https://crypto-quant-lab-oofysotry.vercel.app/api/health/ (API 주소 `/`로 들어오면 대시보드로 이동)
 - **API 문서(Swagger):** https://crypto-quant-lab-oofysotry.vercel.app/api/docs/
 - 대상 종목: KRW-BTC, KRW-ETH, KRW-XRP, KRW-SOL, KRW-DOGE (상장일부터 약 13,700개 일봉)
@@ -37,19 +37,19 @@ flowchart LR
     end
 
     subgraph vercel_back [Vercel · API 프로젝트 · 싱가포르]
-        cron[[Vercel Cron<br/>매일 KST 09시대]]
-        api[Django REST API<br/>수집 · 무결성 검사<br/>백테스트]
+        cron[[Vercel Cron 2개<br/>일봉 KST 09시대<br/>분봉 KST 11시대]]
+        api[Django REST API<br/>수집 · 집계 · 검사<br/>백테스트 · 운영 콘솔]
     end
 
-    db[(Neon PostgreSQL<br/>일봉 · 이슈 · 결과)]
-    redis[(Upstash Redis<br/>백테스트 캐시<br/>요청 제한)]
+    db[(Neon PostgreSQL<br/>일봉 · 분봉 30일 · 집계<br/>이슈 · 재처리 이력)]
+    redis[(Upstash Redis<br/>백테스트 캐시 · 요청 제한<br/>느린 쿼리 목록)]
     sentry[Sentry]
 
     user -- 화면 --> next
     next -- 조회 --> api
     user -- 백테스트 실행<br/>CORS · IP별 요청 제한 --> api
     cron -- Bearer 비밀값 --> api
-    api -- 최근 7일 일봉 --> upbit
+    api -- 최근 7일 일봉<br/>최근 2일 분봉 --> upbit
     api -- 커넥션 풀러 --> db
     api --> redis
     api -- 수집 후 캐시 즉시 만료 --> reval
