@@ -1,8 +1,17 @@
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 from rest_framework import serializers
 
-from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue, ReprocessRun
+from market.aggregates import MODELS
+from market.models import (
+    Asset,
+    CollectionRun,
+    DailyCandle,
+    HourlyBar,
+    IntegrityIssue,
+    MinuteCandle,
+    ReprocessRun,
+)
 from market.upbit import current_trading_day
 
 
@@ -37,6 +46,58 @@ class CandleQuerySerializer(serializers.Serializer):
         if attrs.get("start") and attrs.get("end") and attrs["start"] > attrs["end"]:
             raise serializers.ValidationError("from은 to보다 늦을 수 없습니다.")
         return attrs
+
+
+class MinuteCandleSerializer(serializers.ModelSerializer):
+    # 분봉은 UTC로 저장하고 UTC로 내보낸다(일봉 경계 UTC 00:00과 맞춰 읽기 쉽게).
+    ts = serializers.DateTimeField(default_timezone=UTC)
+
+    class Meta:
+        model = MinuteCandle
+        fields = ["ts", "open", "high", "low", "close", "volume", "value"]
+
+
+class MinuteQuerySerializer(CandleQuerySerializer):
+    """GET /api/minutes/ 쿼리 파라미터 검증. from·to는 시각(시간대 없으면 UTC), to는 미포함."""
+
+    start = serializers.DateTimeField(required=False, default_timezone=UTC)
+    end = serializers.DateTimeField(required=False, default_timezone=UTC)
+
+
+class AggBarSerializer(serializers.ModelSerializer):
+    bucket = serializers.DateTimeField(default_timezone=UTC)
+
+    class Meta:
+        model = HourlyBar  # 필드는 AggBar 공통이라 DailyAgg에도 그대로 쓴다
+        fields = [
+            "bucket",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "value",
+            "vwap",
+            "volatility",
+            "minute_count",
+        ]
+
+
+class BarQuerySerializer(MinuteQuerySerializer):
+    """GET /api/bars/ 쿼리 파라미터 검증. unit은 hour(시간봉) 또는 day(분봉으로 만든 일봉)."""
+
+    PARAM_NAMES = {**MinuteQuerySerializer.PARAM_NAMES, "unit": "unit"}
+
+    unit = serializers.ChoiceField(choices=list(MODELS))
+
+
+class MinuteStatusSerializer(serializers.Serializer):
+    """GET /api/minutes/status/ 종목 하나의 최신 상태."""
+
+    symbol = serializers.CharField()
+    last_minute = serializers.DateTimeField(allow_null=True, default_timezone=UTC)
+    last_hour = serializers.DateTimeField(allow_null=True, default_timezone=UTC)
+    last_day = serializers.DateTimeField(allow_null=True, default_timezone=UTC)
 
 
 class CollectionRunSerializer(serializers.ModelSerializer):
