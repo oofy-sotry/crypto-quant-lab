@@ -218,3 +218,72 @@ class ReprocessRunSerializer(serializers.ModelSerializer):
             "finished_at",
             "error_message",
         ]
+
+
+class DayCellSerializer(serializers.Serializer):
+    """운영 콘솔 매트릭스의 칸 하나 (종목, UTC 날짜)."""
+
+    date = serializers.DateField()
+    status = serializers.ChoiceField(
+        choices=["error", "no_minutes", "not_aggregated", "warning", "ok"],
+        help_text="error > no_minutes > not_aggregated > warning > ok 순으로 가장 심한 것",
+    )
+    minute_count = serializers.IntegerField()
+    aggregated_minutes = serializers.IntegerField(
+        allow_null=True, help_text="일 집계가 만들어질 때의 분봉 수(없으면 null)"
+    )
+    daily_final = serializers.BooleanField(help_text="업비트 확정 일봉이 있는지")
+    open_errors = serializers.IntegerField()
+    open_warnings = serializers.IntegerField()
+    reprocess_runs = serializers.IntegerField(help_text="이 날을 포함한 재처리 수(dry-run 포함)")
+
+
+class DayRowSerializer(serializers.Serializer):
+    symbol = serializers.CharField()
+    cells = DayCellSerializer(many=True)
+
+
+class DayMatrixSerializer(serializers.Serializer):
+    """GET /api/ops/days/ 응답."""
+
+    start = serializers.DateField()
+    end = serializers.DateField()
+    rows = DayRowSerializer(many=True)
+
+
+class GapSerializer(serializers.Serializer):
+    start = serializers.DateTimeField(default_timezone=UTC)
+    end = serializers.DateTimeField(default_timezone=UTC)
+    minutes = serializers.IntegerField()
+
+
+class HourCountSerializer(serializers.Serializer):
+    hour = serializers.DateTimeField(default_timezone=UTC)
+    minute_count = serializers.IntegerField()
+
+
+class DayValuesSerializer(serializers.Serializer):
+    """일봉 값 한 벌. Decimal은 정밀도를 지키려고 문자열로 낸다(다른 API와 같게)."""
+
+    open = serializers.CharField()
+    high = serializers.CharField()
+    low = serializers.CharField()
+    close = serializers.CharField()
+    volume = serializers.CharField()
+    value = serializers.CharField()
+    minute_count = serializers.IntegerField(required=False)  # 분봉 집계에만
+    is_final = serializers.BooleanField(required=False)  # 업비트 일봉에만
+
+
+class DayDetailSerializer(serializers.Serializer):
+    """GET /api/ops/days/{symbol}/{date}/ 응답."""
+
+    symbol = serializers.CharField()
+    date = serializers.DateField()
+    minute_count = serializers.IntegerField()
+    gaps = GapSerializer(many=True, help_text="10분 이상 빈 구간")
+    hourly = HourCountSerializer(many=True, help_text="시간대별 집계 분봉 수(없는 시간은 0)")
+    daily_agg = DayValuesSerializer(allow_null=True, help_text="분봉으로 만든 일봉")
+    daily_candle = DayValuesSerializer(allow_null=True, help_text="업비트 일봉")
+    issues = IntegrityIssueSerializer(many=True)
+    reprocess_runs = ReprocessRunSerializer(many=True)
