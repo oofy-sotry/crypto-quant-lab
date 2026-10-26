@@ -1,10 +1,9 @@
-import threading
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
-from django.db import connection, transaction
+from django.db import transaction
 
 from backtest.services import data_version
 from market.aggregates import aggregate_minutes
@@ -43,33 +42,9 @@ def btc():
     return get_asset("KRW-BTC")
 
 
-def hold_lock_in_other_connection(asset, start, end):
-    """다른 DB 연결(스레드)에서 락을 잡고 있게 한다. 돌려준 release()를 부르면 풀린다."""
-    locked, release = threading.Event(), threading.Event()
-
-    def worker():
-        try:
-            with transaction.atomic():
-                assert lock_days(asset, start, end)
-                locked.set()
-                release.wait(timeout=10)
-        finally:
-            connection.close()  # 스레드마다 연결이 따로 생기므로 직접 닫는다
-
-    thread = threading.Thread(target=worker)
-    thread.start()
-    assert locked.wait(timeout=10)
-
-    def finish():
-        release.set()
-        thread.join()
-
-    return finish
-
-
 @pytest.mark.django_db(transaction=True)
-def test_lock_days_rejects_overlapping_period_and_frees_after_commit(btc):
-    finish = hold_lock_in_other_connection(btc, DAY, DAY.replace(day=22))
+def test_lock_days_rejects_overlapping_period_and_frees_after_commit(btc, hold_lock):
+    finish = hold_lock(btc, DAY, DAY.replace(day=22))
     try:
         with transaction.atomic():
             assert lock_days(btc, DAY.replace(day=22), DAY.replace(day=25)) is False  # 22일 겹침
@@ -329,8 +304,8 @@ def test_run_reprocess_failure_rolls_back_everything(btc):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_run_reprocess_rejects_while_same_period_is_running(btc):
-    finish = hold_lock_in_other_connection(btc, DAY, DAY)
+def test_run_reprocess_rejects_while_same_period_is_running(btc, hold_lock):
+    finish = hold_lock(btc, DAY, DAY)
     try:
         record = run(btc, FakeMinuteClient([]), dry_run=False)
     finally:
