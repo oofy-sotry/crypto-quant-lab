@@ -105,6 +105,7 @@ class CollectionRunSerializer(serializers.ModelSerializer):
         model = CollectionRun
         fields = [
             "id",
+            "kind",
             "trigger",
             "status",
             "started_at",
@@ -112,6 +113,7 @@ class CollectionRunSerializer(serializers.ModelSerializer):
             "assets_count",
             "upserted_count",
             "error_message",
+            "detail",
         ]
 
 
