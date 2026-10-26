@@ -13,7 +13,7 @@ function seconds(value: number | undefined): string {
   return value === undefined ? "-" : `${value.toFixed(1)}초`;
 }
 
-/** 분봉 파이프라인 실행 기록(최신순): 단계별 소요 시간과 보관 기간 정리로 지운 분봉 수 */
+/** 분봉 파이프라인 실행 기록(최신순): 바뀐 분봉 수, 단계별 소요 시간, 보관 기간 정리로 지운 분봉 수 */
 export function MinuteRunTable({ runs, now }: { runs: CollectionRun[]; now: number }) {
   if (runs.length === 0) {
     return <p className="py-6 text-center text-sm text-muted">분봉 파이프라인 실행 기록이 없습니다.</p>;
@@ -27,7 +27,9 @@ export function MinuteRunTable({ runs, now }: { runs: CollectionRun[]; now: numb
             <th className="px-2 py-2 font-normal">종류</th>
             <th className="px-2 py-2 font-normal">상태</th>
             <th className="px-2 py-2 font-normal">대상 날짜(UTC)</th>
-            <th className="px-2 py-2 text-right font-normal">저장</th>
+            <th className="px-2 py-2 text-right font-normal" title="값이 같은 분봉은 다시 쓰지 않으므로 새로 넣거나 바뀐 분봉 수">
+              바뀐 분봉
+            </th>
             <th className="px-2 py-2 text-right font-normal">수집·집계</th>
             <th className="px-2 py-2 text-right font-normal">검사</th>
             <th className="px-2 py-2 text-right font-normal">정리</th>
