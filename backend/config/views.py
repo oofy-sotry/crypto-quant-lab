@@ -1,3 +1,4 @@
+import logging
 import time
 from datetime import datetime, timedelta
 
@@ -13,6 +14,8 @@ from rest_framework.decorators import api_view, throttle_classes
 from rest_framework.response import Response
 
 from config.querylog import recent_slow_queries
+
+logger = logging.getLogger(__name__)
 
 
 def _check_database():
@@ -66,11 +69,16 @@ def health(request):
 
 
 def _query_metrics(cache_ok: bool) -> dict:
-    """느린 쿼리 기준과 최근 24시간 건수. 느린 쿼리 목록은 Redis에 있어 Redis가 죽으면 None."""
+    """느린 쿼리 기준과 최근 24시간 건수. 목록은 Redis에 있어 Redis가 죽거나 못 읽으면 None."""
     slow_24h = None
     if cache_ok:
         since = timezone.now() - timedelta(hours=24)
-        slow_24h = sum(1 for q in recent_slow_queries() if datetime.fromisoformat(q["at"]) >= since)
+        try:
+            slow_24h = sum(
+                1 for q in recent_slow_queries() if datetime.fromisoformat(q["at"]) >= since
+            )
+        except Exception:  # 지표 하나 때문에 health가 500이 되면 장애 원인을 못 알린다
+            logger.warning("느린 쿼리 목록 읽기 실패", exc_info=True)
     # 목록은 최근 50건까지만 보관하므로 그보다 많으면 50으로 잘린다.
     return {"slow_threshold_ms": settings.SLOW_QUERY_MS, "slow_24h": slow_24h}
 

@@ -55,3 +55,13 @@ def test_openapi_schema_and_swagger_ui_are_served(client):
     assert schema.status_code == 200
     assert b"/api/backtests/" in schema.content
     assert docs.status_code == 200
+
+
+@pytest.mark.django_db
+def test_health_survives_slow_query_list_failure(client):
+    # Redis 확인은 통과했는데 목록 읽기에서 실패해도 health는 500으로 죽지 않는다.
+    with patch("config.views.recent_slow_queries", side_effect=ConnectionError):
+        response = client.get(reverse("health"))
+
+    assert response.status_code == 200
+    assert response.json()["queries"]["slow_24h"] is None
