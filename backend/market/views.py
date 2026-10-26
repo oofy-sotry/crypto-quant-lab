@@ -313,6 +313,7 @@ OPS_MAX_DAYS = 90
 
 
 @extend_schema(
+    operation_id="ops_days_matrix",
     parameters=[OpenApiParameter("days", int, description="최근 며칠(기본 30, 최대 90)")],
     responses=DayMatrixSerializer,
 )
@@ -338,7 +339,7 @@ class OpsDayMatrixView(APIView):
 class OpsDayDetailView(APIView):
     """운영 콘솔: 한 종목·하루 상세(분봉 수·빈 구간·시간대별 집계·일봉 대조·이슈·재처리 이력)."""
 
-    @extend_schema(responses=DayDetailSerializer)
+    @extend_schema(operation_id="ops_day_detail", responses=DayDetailSerializer)
     def get(self, request, symbol: str, day: str):
         asset = get_object_or_404(Asset, symbol=symbol)
         try:
