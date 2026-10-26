@@ -63,4 +63,6 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r requirements-dev.txt
+      # API 문서(OpenAPI) 스키마가 경고 없이 만들어지는지. 뷰의 스키마 설정 실수는 테스트로 안 잡힌다.
+      - run: python manage.py spectacular --validate --fail-on-warn --file /dev/null
       - run: pytest -q
