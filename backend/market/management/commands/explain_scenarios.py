@@ -1,14 +1,16 @@
 import json
 import statistics
 import time
+from base64 import b64encode
 from datetime import UTC, date, datetime, timedelta
+from urllib.parse import urlencode
 
 from django.core.management.base import BaseCommand
 from django.db import connection
 from rest_framework.test import APIRequestFactory
 
 from market.integrity import MIN_GAP, find_gaps_in_db
-from market.models import Asset
+from market.models import Asset, MinuteCandle
 from market.views import (
     AggBarListView,
     IntegrityIssueListView,
@@ -32,6 +34,20 @@ def api(view, path: str, **query):
     return lambda: view_fn(request).render()
 
 
+# 예전 페이지 번호 방식의 page=500(500개씩)과 같은 위치. 전후 비교를 같은 행들로 한다.
+DEEP_OFFSET = 249_500
+
+
+def cursor_at(offset: int) -> dict:
+    """offset번째 행부터 읽는 커서 쿼리. DRF CursorPagination과 같은 형식(p=마지막으로 본 값)."""
+    asset = Asset.objects.get(symbol=SYMBOL)
+    rows = MinuteCandle.objects.filter(asset=asset).order_by("ts").values_list("ts", flat=True)
+    before = list(rows[offset - 1 : offset])
+    if not before:  # 데이터가 적으면(테스트 DB) 첫 페이지
+        return {}
+    return {"cursor": b64encode(urlencode({"p": before[0]}).encode()).decode()}
+
+
 def gaps(days: int):
     asset = Asset.objects.get(symbol=SYMBOL)
     end = datetime.combine(LAST_DAY + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
@@ -43,7 +59,9 @@ def scenarios() -> dict:
     return {
         # 1. 종목·기간 분봉 조회 (페이지네이션): 첫 페이지 / 깊은 페이지(1년 중 절반쯤)
         "minutes_first_page": api(MinuteCandleListView, "/api/minutes/", symbol=SYMBOL),
-        "minutes_deep_page": api(MinuteCandleListView, "/api/minutes/", symbol=SYMBOL, page=500),
+        "minutes_deep_page": api(
+            MinuteCandleListView, "/api/minutes/", symbol=SYMBOL, **cursor_at(DEEP_OFFSET)
+        ),
         "minutes_month": api(
             MinuteCandleListView, "/api/minutes/", symbol=SYMBOL, **{"from": month_ago}
         ),
