@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Value
 
 
 class Asset(models.Model):
@@ -116,6 +117,10 @@ class DailyAgg(AggBar):
 
 
 class CollectionRun(models.Model):
+    class Kind(models.TextChoices):
+        DAILY = "daily", "일봉"
+        MINUTES = "minutes", "분봉(수집·집계·검사·보관 정리)"
+
     class Trigger(models.TextChoices):
         CRON = "cron", "Vercel Cron"
         BEAT = "beat", "Celery beat"
@@ -128,6 +133,11 @@ class CollectionRun(models.Model):
         PARTIAL = "partial", "일부 실패"
         FAILED = "failed", "실패"
 
+    # 기존 기록은 모두 일봉 수집이라 daily로 채운다. db_default: 운영에 migrate한 뒤 새 코드가
+    # 배포되기 전까지 옛 코드가 이 컬럼 없이 INSERT해도 NOT NULL에 걸리지 않게 DB 기본값을 남긴다.
+    kind = models.CharField(
+        max_length=10, choices=Kind.choices, default=Kind.DAILY, db_default=Kind.DAILY
+    )
     trigger = models.CharField(max_length=10, choices=Trigger.choices)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
     started_at = models.DateTimeField(auto_now_add=True)
@@ -135,12 +145,16 @@ class CollectionRun(models.Model):
     assets_count = models.PositiveIntegerField(default=0)
     upserted_count = models.PositiveIntegerField(default=0)
     error_message = models.TextField(blank=True)
+    # 단계별 소요 시간·삭제 행 수·검사 결과 등 실행 상세(분봉 파이프라인이 채운다).
+    detail = models.JSONField(
+        default=dict, blank=True, db_default=Value({}, output_field=models.JSONField())
+    )
 
     class Meta:
         ordering = ["-started_at"]
 
     def __str__(self):
-        return f"{self.trigger} {self.started_at:%Y-%m-%d %H:%M} {self.status}"
+        return f"{self.kind} {self.trigger} {self.started_at:%Y-%m-%d %H:%M} {self.status}"
 
 
 class IntegrityIssue(models.Model):
