@@ -12,6 +12,7 @@ urlpatterns = [
     path("integrity/summary/", views.IntegritySummaryView.as_view(), name="integrity-summary"),
     path("integrity/issues/", views.IntegrityIssueListView.as_view(), name="integrity-issue-list"),
     path("ops/days/", views.OpsDayMatrixView.as_view(), name="ops-days"),
+    path("ops/slow-queries/", views.OpsSlowQueriesView.as_view(), name="ops-slow-queries"),
     path("ops/days/<str:symbol>/<str:day>/", views.OpsDayDetailView.as_view(), name="ops-day"),
     path("cron/collect/", views.CronCollectView.as_view(), name="cron-collect"),
     path("cron/minutes/", views.CronMinutesView.as_view(), name="cron-minutes"),

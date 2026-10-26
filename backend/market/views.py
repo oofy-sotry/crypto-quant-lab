@@ -14,6 +14,7 @@ from rest_framework.pagination import CursorPagination, PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from config.querylog import recent_slow_queries
 from market.aggregates import MODELS
 from market.dashboard import revalidate_dashboard
 from market.minute_pipeline import run_minute_pipeline
@@ -45,6 +46,7 @@ from market.serializers import (
     MinuteStatusSerializer,
     ReprocessRequestSerializer,
     ReprocessRunSerializer,
+    SlowQuerySerializer,
 )
 from market.services import collect_candles
 from market.upbit import current_trading_day
@@ -347,6 +349,14 @@ class OpsDayDetailView(APIView):
         except ValueError:
             return Response({"detail": "날짜는 YYYY-MM-DD"}, status=400)
         return Response(DayDetailSerializer(day_detail(asset, parsed)).data)
+
+
+class OpsSlowQueriesView(APIView):
+    """최근 느린 쿼리(SLOW_QUERY_MS 이상, 최신순 최대 50건, 7일 보관). Cron 배치는 제외."""
+
+    @extend_schema(responses=SlowQuerySerializer(many=True))
+    def get(self, request):
+        return Response(SlowQuerySerializer(recent_slow_queries(), many=True).data)
 
 
 class CronView(APIView):

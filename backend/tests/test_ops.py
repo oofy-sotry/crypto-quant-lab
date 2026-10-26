@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from django.urls import reverse
 
+from config.querylog import Query, QueryLog, record_slow_queries
 from market.aggregates import upsert_aggregates
 from market.models import Asset, DailyCandle, IntegrityIssue, MinuteCandle, ReprocessRun
 from market.ops import cell_status
@@ -152,3 +153,15 @@ def test_ops_day_detail_without_data_and_bad_input(client):
 
     assert client.get(reverse("ops-day", args=["KRW-NOPE", "2026-10-20"])).status_code == 404
     assert client.get(reverse("ops-day", args=["KRW-BTC", "어제"])).status_code == 400
+
+
+@pytest.mark.django_db
+def test_ops_slow_queries_lists_recorded_entries(client, settings):
+    settings.SLOW_QUERY_MS = 100
+    record_slow_queries("/api/minutes/", QueryLog([Query("SELECT 느림", (1,), 0.4)]))
+
+    body = client.get(reverse("ops-slow-queries")).json()
+
+    assert [(e["path"], e["ms"], e["sql"]) for e in body] == [
+        ("/api/minutes/", 400.0, "SELECT 느림")
+    ]
