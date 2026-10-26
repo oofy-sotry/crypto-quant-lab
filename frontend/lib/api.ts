@@ -122,7 +122,13 @@ export type DayValues = {
   is_final?: boolean;
 };
 
-export type ReprocessTable = { inserted: number; updated: number; deleted: number; dates: Record<string, Record<string, number>> };
+/** 재처리 diff의 테이블 하나: 추가·변경·삭제 수와 날짜별 내역 */
+export type ReprocessTableDiff = {
+  inserted: number;
+  updated: number;
+  deleted: number;
+  dates: Record<string, Record<string, number>>;
+};
 
 export type ReprocessRun = {
   id: number;
@@ -138,7 +144,7 @@ export type ReprocessRun = {
   rows_after: number | null;
   changed_rows: number | null;
   // 테이블 이름(minutecandle·hourlybar·dailyagg·dailycandle) → 추가·변경·삭제 수, "checks" → 재검증 결과
-  diff: Record<string, ReprocessTable | Record<string, unknown>>;
+  diff: Record<string, ReprocessTableDiff | Record<string, unknown>>;
   started_at: string;
   finished_at: string | null;
   error_message: string;

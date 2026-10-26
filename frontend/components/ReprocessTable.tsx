@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReprocessRun, ReprocessTable as TableDiff } from "@/lib/api";
+import type { ReprocessRun, ReprocessTableDiff } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { REPROCESS_STATE_BG, REPROCESS_STATE_TEXT, reprocessState, TABLE_TEXT, TARGET_TEXT } from "@/lib/ops";
 
@@ -7,7 +7,7 @@ import { REPROCESS_STATE_BG, REPROCESS_STATE_TEXT, reprocessState, TABLE_TEXT, T
 function diffSummary(run: ReprocessRun): string[] {
   return Object.keys(TABLE_TEXT)
     .filter((table) => table in run.diff)
-    .map((table) => [table, run.diff[table] as TableDiff] as const)
+    .map((table) => [table, run.diff[table] as ReprocessTableDiff] as const)
     .filter(([, t]) => t.inserted + t.updated + t.deleted > 0)
     .map(([table, t]) => `${TABLE_TEXT[table]} +${t.inserted} ~${t.updated} -${t.deleted}`);
 }
