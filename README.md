@@ -22,7 +22,7 @@
 | DB·캐시 | PostgreSQL 18 (운영: Neon), Redis (운영: Upstash) — v1은 MySQL 8(Aiven), 태그 `v1-mysql` |
 | 프론트엔드 | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, lightweight-charts |
 | 배포·운영 | Vercel (서버리스 함수 + Cron, 대시보드는 별도 프로젝트), Sentry |
-| 품질 | pytest (테스트 241개), ruff, ESLint, GitHub Actions (lint + PostgreSQL·Redis 컨테이너로 pytest) |
+| 품질 | pytest (테스트 245개), ruff, ESLint, GitHub Actions (lint + PostgreSQL·Redis 컨테이너로 pytest) |
 
 ## 아키텍처
 
@@ -226,7 +226,7 @@ API 서버의 CORS 기본값이 `http://localhost:3000`이라 따로 설정할 �
 
 ```bash
 cd backend
-pytest          # 241개, PostgreSQL·Redis 컨테이너가 떠 있어야 함
+pytest          # 245개, PostgreSQL·Redis 컨테이너가 떠 있어야 함
 ruff check . && ruff format --check .
 ```
 
