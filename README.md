@@ -62,7 +62,7 @@ flowchart LR
 | API | `manage.py runserver` | Vercel 서버리스 함수 (싱가포르 `sin1`) |
 | DB | PostgreSQL 18 컨테이너 | Neon PostgreSQL 18 (싱가포르, PgBouncer 풀러, SSL) |
 | 캐시·요청 제한 | Redis 컨테이너 | Upstash Redis (싱가포르) |
-| 정기 수집 | `manage.py collect` | Vercel Cron → `GET /api/cron/collect/` (매일 KST 09시대. 무료 플랜이라 09:00~09:59 중 실행) |
+| 정기 수집 | `manage.py collect`, `collect_minutes` + `aggregate_minutes` | Vercel Cron 2개 → 일봉 `GET /api/cron/collect/` (매일 KST 09시대), 분봉 `GET /api/cron/minutes/` (KST 11시대). 무료 플랜이라 지정한 시각부터 59분 사이 아무 때나 실행 |
 | 오류 모니터링 | 콘솔 로그 | Sentry |
 
 대시보드·API 함수와 DB·캐시를 모두 싱가포르에 둡니다. 처음에는 API 함수가 미국에서 돌아 응답이 4.2초 걸렸는데, 같은 리전으로 모아 0.46초로 줄였습니다. 나중에 만든 대시보드 프로젝트도 기본 리전이 미국이어서 같은 방식으로 옮겼습니다.
@@ -160,7 +160,7 @@ python manage.py reprocess --asset KRW-BTC --target minutes \
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | `/` | 대시보드로 302 이동 (`DASHBOARD_URL`이 없으면 404) |
-| GET | `/api/health/` | DB·Redis 연결 상태와 소요 시간 |
+| GET | `/api/health/` | DB·Redis 연결 상태와 소요 시간, 느린 쿼리 기준·최근 24시간 건수 |
 | GET | `/api/assets/` | 종목 목록 |
 | GET | `/api/candles/?symbol=KRW-BTC&from=2025-01-01&to=2025-12-31` | 일봉 (페이지당 500개, 최대 5000) |
 | GET | `/api/minutes/?symbol=KRW-BTC&from=2026-10-01T00:00Z&to=2026-10-02T00:00Z` | 분봉 (v2, UTC, `to` 미포함, keyset 페이지네이션 — `next` 링크로 이어 읽기, 페이지당 500개·최대 5000) |
@@ -168,12 +168,17 @@ python manage.py reprocess --asset KRW-BTC --target minutes \
 | GET | `/api/minutes/status/` | 종목별 마지막 분봉·시간봉·일 집계 시각 (v2) |
 | GET | `/api/integrity/summary/` | 종목별 데이터 범위·열린 이슈 수·마지막 수집 |
 | GET | `/api/integrity/issues/?symbol=&type=&severity=&resolved=` | 무결성 이슈 목록 |
-| GET | `/api/collection-runs/` | 수집 실행 기록 |
+| GET | `/api/collection-runs/?kind=daily\|minutes` | 수집 실행 기록 (일봉 수집 / 분봉 파이프라인, 분봉은 단계별 소요 시간 포함) |
+| GET | `/api/ops/days/?days=30` | 운영 콘솔: 활성 종목 × 최근 N일 상태 표 (오류 / 분봉 없음 / 집계 안 됨 / 경고 / 정상) |
+| GET | `/api/ops/days/{symbol}/{date}/` | 운영 콘솔: 하루 상세 (빈 구간, 시간대별 집계, 업비트 일봉 대조, 이슈, 재처리 이력) |
+| GET | `/api/ops/slow-queries/` | 최근 느린 쿼리 50건 (`SLOW_QUERY_MS` 이상, SQL 모양만) |
 | POST | `/api/backtests/` | 백테스트 실행 (새로 계산 201, 기존 결과 200, 입력 오류 400, 데이터 문제 422, 분당 20회 초과 429) |
 | GET | `/api/backtests/{id}/` | 백테스트 결과 조회 |
 | POST | `/api/reprocess/` | 재처리 (v2). `Authorization: Bearer <ADMIN_API_TOKEN>` 필요, 기본 dry-run(`"dry_run": false`일 때만 반영), 성공 201·같은 종목·기간 실행 중 409·실패 500(전부 롤백), 분봉·집계 31일·일봉 366일까지 |
+| GET | `/api/reprocess/?symbol=&date=` | 재처리 이력 목록 (그 날짜를 포함한 재처리만 거를 수 있음) |
 | GET | `/api/reprocess/{id}/` | 재처리 이력 (누가·왜·무엇이 바뀌었는지, 날짜별 차이, 재검증 결과) |
-| GET | `/api/cron/collect/` | 정기 수집 (Vercel Cron 전용, `Authorization: Bearer <CRON_SECRET>` 필요, 전 종목 실패 시 500, API 문서에는 숨김) |
+| GET | `/api/cron/collect/` | 정기 일봉 수집 (Vercel Cron 전용, `Authorization: Bearer <CRON_SECRET>` 필요, 전 종목 실패 시 500, API 문서에는 숨김) |
+| GET | `/api/cron/minutes/` | 정기 분봉 파이프라인 (같은 인증, 최근 2일 수집 → 집계 → 검사 → 보관 기간 지난 분봉 삭제) |
 | GET | `/api/docs/`, `/api/schema/` | Swagger UI, OpenAPI 스키마 |
 
 일반 API는 IP당 분당 120회로 제한합니다. 제한 카운터는 Redis에 있어서 서버리스 인스턴스가 여러 개여도 함께 셉니다.
