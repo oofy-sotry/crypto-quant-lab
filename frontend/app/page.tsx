@@ -24,7 +24,7 @@ export default async function Home() {
       <section>
         <h1 className="text-2xl font-bold tracking-tight">코인 데이터 대시보드</h1>
         <p className="mt-1 text-sm text-muted">
-          업비트 일봉을 매일 수집해 무결성을 검사하고, 전략을 백테스트합니다.
+          업비트 일봉·1분봉을 매일 수집해 무결성과 두 원본 사이 정합성을 검사하고, 전략을 백테스트합니다.
         </p>
       </section>
 
@@ -75,6 +75,13 @@ export default async function Home() {
         >
           <div className="font-semibold">운영 상태 →</div>
           <p className="mt-1 text-sm text-muted">서버 상태와 매일 자동 수집(Cron) 기록을 봅니다.</p>
+        </Link>
+        <Link
+          href="/ops"
+          className="rounded-xl border border-border bg-panel p-4 transition-colors hover:border-accent"
+        >
+          <div className="font-semibold">운영 콘솔 →</div>
+          <p className="mt-1 text-sm text-muted">종목·날짜별 분봉 수집·집계·검사 상태와 재처리 이력을 봅니다.</p>
         </Link>
       </section>
     </div>
