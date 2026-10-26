@@ -1,6 +1,6 @@
 import type { CollectionRun, Health } from "@/lib/api";
 import { formatDateTime, hoursSince } from "@/lib/format";
-import { kstDate, RUN_STATE_TEXT, runState, STALE_HOURS } from "@/lib/runs";
+import { DAILY_CRON_TEXT, kstDate, RUN_STATE_TEXT, runState, STALE_HOURS } from "@/lib/runs";
 
 type Tone = "ok" | "warn" | "error";
 
@@ -63,7 +63,7 @@ export function OpsCards({ health, runs, now }: { health: Health | null; runs: C
         ) : (
           "아직 자동 수집 기록이 없습니다."
         )}
-        <div>매일 KST 09시대 실행</div>
+        <div>{DAILY_CRON_TEXT} 실행</div>
       </Card>
       <Card
         label="자동 수집 성공 (어제까지 최근 7일)"

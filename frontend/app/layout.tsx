@@ -35,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
         <footer className="border-t border-border text-xs text-muted">
           <div className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-4">
-            <span>데이터: 업비트 공개 API (매일 오전 9시대 자동 수집)</span>
+            <span>데이터: 업비트 공개 API (일봉 KST 09:30~10:29, 분봉 11:00~11:59 자동 수집)</span>
             <a className="hover:text-foreground" href={`${API_BASE}/api/docs/`}>
               API 문서
             </a>
