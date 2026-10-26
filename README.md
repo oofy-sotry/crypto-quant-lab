@@ -22,7 +22,7 @@
 | DB·캐시 | PostgreSQL 18 (운영: Neon), Redis (운영: Upstash) — v1은 MySQL 8(Aiven), 태그 `v1-mysql` |
 | 프론트엔드 | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, lightweight-charts |
 | 배포·운영 | Vercel (서버리스 함수 + Cron, 대시보드는 별도 프로젝트), Sentry |
-| 품질 | pytest (테스트 245개), ruff, ESLint, GitHub Actions (lint + PostgreSQL·Redis 컨테이너로 pytest) |
+| 품질 | pytest (테스트 280개), ruff, ESLint, GitHub Actions (lint + API 스키마 검증 + PostgreSQL·Redis 컨테이너로 pytest) |
 
 ## 아키텍처
 
@@ -238,7 +238,7 @@ API 서버의 CORS 기본값이 `http://localhost:3000`이라 따로 설정할 �
 
 ```bash
 cd backend
-pytest          # 245개, PostgreSQL·Redis 컨테이너가 떠 있어야 함
+pytest          # 280개, PostgreSQL·Redis 컨테이너가 떠 있어야 함
 ruff check . && ruff format --check .
 ```
 
@@ -283,6 +283,8 @@ ruff check . && ruff format --check .
 | 분봉 집계 VWAP가 pandas 참조 구현과 1e-8 다름 (시간봉 8,741개 중 1개) | 참값은 `…264\|4999…`인데, PostgreSQL `numeric` 나눗셈이 소수 12자리에서 한 번 반올림하고(`…2645000`) `round(…, 8)`이 또 반올림해 `…265`가 됐습니다. 무작위 데이터 테스트는 통과했고, 실제 1년치를 전부 대조하고서야 나왔습니다 | 소수 20자리로 나눈 뒤 한 번만 반올림, 실제 값으로 회귀 테스트 |
 | 종목별 최신 상태 API가 0.6초 | `GROUP BY asset_id` + `Max(ts)`는 인덱스가 있어도 260만 행을 전부 읽습니다. PostgreSQL은 그룹마다 인덱스를 건너뛰며 읽지(loose index scan) 않습니다. `EXPLAIN`에서 Seq Scan과 버퍼 3.9만 개를 보고 알았습니다 | 종목마다 `ORDER BY ts DESC LIMIT 1` 서브쿼리 → Index Only Scan Backward, 7ms |
 | 직접 고친 커서로 분봉 API 500 | DRF `CursorPagination`은 커서 안의 위치 값을 검증 없이 필터에 넣어서, 시각이 아닌 값이면 Django `ValidationError`가 그대로 올라옵니다. 측정 도구에서 커서를 잘못 인코딩했을 때 드러났습니다 | 잘못된 커서는 404, 테스트 추가 |
+| 운영 콘솔 하루 상세에서 거래대금이 float로 나갈 뻔함 (만들면서 발견) | `DictField`는 안의 값을 그대로 두고, DRF JSON 인코더는 `Decimal`을 float로 바꿉니다. 다른 API는 문자열로 내보내는데 여기만 정밀도가 깨질 뻔했습니다 | 안쪽 구조도 직렬화기로 명시(Decimal → 문자열), 렌더링한 JSON으로 확인 |
+| API 문서 스키마 오류가 커밋까지 감 | 클래스에 `@extend_schema(operation_id=…)`를 붙이면 drf-spectacular가 오류를 내는데, 테스트는 스키마를 만들지 않아 통과했습니다 | 설정을 메서드로 옮기고, CI와 커밋 전 검사에 `spectacular --validate --fail-on-warn` 추가 |
 | 수년치 차트의 앞부분이 잘림 | 차트 라이브러리의 최소 봉 간격(0.5px) × 2,100일이 차트 너비보다 컸습니다. 처음엔 차트 크기 문제로 봤지만, 왼쪽 끝 값이 0%가 아닌 것을 보고 가설을 바꿨습니다 | 최소 봉 간격 0.05px |
 | Cron이 멈추면 백테스트가 전부 422가 될 수 있었음 (코드 리뷰에서 발견) | 미해결 오류가 있으면 백테스트를 거부하는데, "수집 지연" 이슈도 오류이고 날짜가 마지막 확정일이라 거의 모든 기간에 걸렸습니다 | 수집 지연은 거부 대상에서 제외(있는 데이터가 틀린 게 아니므로) |
 
