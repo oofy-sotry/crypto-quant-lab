@@ -70,12 +70,24 @@ def test_minutes_next_cursor_continues_after_last_row_within_range(client, btc):
     [
         "not-base64!",
         b64encode(b"p=yesterday").decode(),  # 형식은 맞는데 위치 값이 시각이 아님
+        b64encode(b"p=2026-13-40 00:00:00").decode(),  # 시각 형식이지만 없는 날짜
     ],
 )
 def test_minutes_rejects_tampered_cursor_with_404(client, btc, cursor):
     response = client.get(reverse("minute-list"), {"symbol": "KRW-BTC", "cursor": cursor})
 
     assert response.status_code == 404
+
+
+def test_minutes_cursor_without_timezone_is_utc_like_from_to(client, btc):
+    cursor = b64encode(b"p=2026-10-23 00:57:00").decode()  # 시간대 없이 직접 만든 커서
+
+    response = client.get(reverse("minute-list"), {"symbol": "KRW-BTC", "cursor": cursor})
+
+    assert [m["ts"] for m in response.json()["results"]] == [
+        "2026-10-23T00:58:00Z",
+        "2026-10-23T00:59:00Z",
+    ]
 
 
 def test_minutes_treats_naive_time_as_utc(client, btc):

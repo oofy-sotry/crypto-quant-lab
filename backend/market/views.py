@@ -1,9 +1,12 @@
 import hmac
+from datetime import UTC
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count, Max, Min, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_datetime
+from django.utils.timezone import is_naive
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics
 from rest_framework.exceptions import NotFound
@@ -110,6 +113,19 @@ class TimeSeriesPagination(CursorPagination):
     page_size = 500
     page_size_query_param = "page_size"
     max_page_size = 5000
+
+    def decode_cursor(self, request):
+        # DRF가 만든 커서는 항상 +00:00이 붙는다. 직접 만든 커서에 시간대가 없으면
+        # 서버 시간대(Asia/Seoul)로 해석되므로 from·to와 같게 UTC로 맞춘다.
+        cursor = super().decode_cursor(request)
+        if cursor and cursor.position:
+            try:
+                position = parse_datetime(cursor.position)
+            except ValueError:  # 형식은 맞는데 없는 날짜 → 아래 paginate_queryset에서 404
+                position = None
+            if position and is_naive(position):
+                cursor = cursor._replace(position=position.replace(tzinfo=UTC).isoformat())
+        return cursor
 
     def paginate_queryset(self, queryset, request, view=None):
         # 커서 안 위치 값이 시각 형식이 아니면(직접 고친 커서) DRF는 500을 낸다 → 404로 바꾼다.
