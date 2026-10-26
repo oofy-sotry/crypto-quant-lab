@@ -1,8 +1,7 @@
 import hmac
-from datetime import datetime
 
 from django.conf import settings
-from django.db.models import Count, Max, Min, Q
+from django.db.models import Count, Max, Min, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics
@@ -149,9 +148,16 @@ class AggBarListView(generics.ListAPIView):
         return time_range(bars, "bucket", params).order_by("bucket")
 
 
-def latest_by_asset(model, field: str) -> dict[int, datetime]:
-    """종목 id → 그 테이블에서 가장 늦은 field 값."""
-    return dict(model.objects.values_list("asset_id").annotate(latest=Max(field)).order_by())
+def latest(model, field: str) -> Subquery:
+    """종목마다 field의 가장 늦은 값.
+
+    GROUP BY asset_id + Max(field)는 테이블 전체(분봉 260만 행)를 읽는다. PostgreSQL은 그룹마다
+    인덱스를 건너뛰며 읽지 못해서다. 종목별 ORDER BY field DESC LIMIT 1 서브쿼리로 바꾸면
+    unique(asset_id, field) 인덱스를 종목마다 끝에서 한 칸만 읽는다. 세 테이블을 한 쿼리로 묶는다
+    (로컬 1년치: 쿼리 4개 DB 약 470ms → 1개 0.2ms).
+    """
+    rows = model.objects.filter(asset=OuterRef("pk")).order_by(f"-{field}").values(field)
+    return Subquery(rows[:1])
 
 
 class MinuteStatusView(APIView):
@@ -159,19 +165,12 @@ class MinuteStatusView(APIView):
 
     @extend_schema(responses=MinuteStatusSerializer(many=True))
     def get(self, request):
-        last_minute = latest_by_asset(MinuteCandle, "ts")
-        last_hour = latest_by_asset(HourlyBar, "bucket")
-        last_day = latest_by_asset(DailyAgg, "bucket")
-        rows = [
-            {
-                "symbol": asset.symbol,
-                "last_minute": last_minute.get(asset.id),
-                "last_hour": last_hour.get(asset.id),
-                "last_day": last_day.get(asset.id),
-            }
-            for asset in Asset.objects.all()
-        ]
-        return Response(MinuteStatusSerializer(rows, many=True).data)
+        assets = Asset.objects.annotate(
+            last_minute=latest(MinuteCandle, "ts"),
+            last_hour=latest(HourlyBar, "bucket"),
+            last_day=latest(DailyAgg, "bucket"),
+        )
+        return Response(MinuteStatusSerializer(assets, many=True).data)
 
 
 class CollectionRunListView(generics.ListAPIView):
