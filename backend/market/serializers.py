@@ -287,3 +287,12 @@ class DayDetailSerializer(serializers.Serializer):
     daily_candle = DayValuesSerializer(allow_null=True, help_text="업비트 일봉")
     issues = IntegrityIssueSerializer(many=True)
     reprocess_runs = ReprocessRunSerializer(many=True)
+
+
+class SlowQuerySerializer(serializers.Serializer):
+    """GET /api/ops/slow-queries/ 항목 하나."""
+
+    at = serializers.DateTimeField()
+    path = serializers.CharField()
+    ms = serializers.FloatField()
+    sql = serializers.CharField(help_text="파라미터 값 없이 SQL 모양만")
