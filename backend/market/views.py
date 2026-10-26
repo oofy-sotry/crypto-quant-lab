@@ -1,4 +1,5 @@
 import hmac
+from datetime import datetime
 
 from django.conf import settings
 from django.db.models import Count, Max, Min, Q
@@ -9,16 +10,31 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from market.aggregates import MODELS
 from market.dashboard import revalidate_dashboard
-from market.models import Asset, CollectionRun, DailyCandle, IntegrityIssue, ReprocessRun
+from market.models import (
+    Asset,
+    CollectionRun,
+    DailyAgg,
+    DailyCandle,
+    HourlyBar,
+    IntegrityIssue,
+    MinuteCandle,
+    ReprocessRun,
+)
 from market.reprocess import run_reprocess
 from market.serializers import (
+    AggBarSerializer,
     AssetSerializer,
+    BarQuerySerializer,
     CandleQuerySerializer,
     CandleSerializer,
     CollectionRunSerializer,
     IntegrityIssueSerializer,
     IntegritySummarySerializer,
+    MinuteCandleSerializer,
+    MinuteQuerySerializer,
+    MinuteStatusSerializer,
     ReprocessRequestSerializer,
     ReprocessRunSerializer,
 )
@@ -79,6 +95,83 @@ class CandleListView(generics.ListAPIView):
         if "end" in params:
             candles = candles.filter(date__lte=params["end"])
         return candles.order_by("date")
+
+
+RANGE_PARAMETERS = [
+    OpenApiParameter("symbol", str, required=True, description="예: KRW-BTC"),
+    OpenApiParameter("from", str, description="시작 시각 ISO 8601 (포함, 시간대 없으면 UTC)"),
+    OpenApiParameter("to", str, description="끝 시각 ISO 8601 (포함 안 함)"),
+]
+
+
+def time_range(queryset, field: str, params: dict):
+    """검증된 from·to로 [start, end) 범위를 건다."""
+    if "start" in params:
+        queryset = queryset.filter(**{f"{field}__gte": params["start"]})
+    if "end" in params:
+        queryset = queryset.filter(**{f"{field}__lt": params["end"]})
+    return queryset
+
+
+@extend_schema(parameters=RANGE_PARAMETERS)
+class MinuteCandleListView(generics.ListAPIView):
+    """분봉 목록 (시각 오름차순, UTC)."""
+
+    serializer_class = MinuteCandleSerializer
+    pagination_class = CandlePagination
+
+    def get_queryset(self):
+        query = MinuteQuerySerializer(data=self.request.query_params)
+        query.is_valid(raise_exception=True)
+        asset = get_object_or_404(Asset, symbol=query.validated_data["symbol"])
+        minutes = MinuteCandle.objects.filter(asset=asset)
+        return time_range(minutes, "ts", query.validated_data).order_by("ts")
+
+
+@extend_schema(
+    parameters=[
+        *RANGE_PARAMETERS,
+        OpenApiParameter("unit", str, required=True, enum=list(MODELS)),
+    ]
+)
+class AggBarListView(generics.ListAPIView):
+    """분봉으로 만든 집계 봉 목록 (구간 시작 오름차순, UTC). unit=hour 시간봉, unit=day 일봉."""
+
+    serializer_class = AggBarSerializer
+    pagination_class = CandlePagination
+
+    def get_queryset(self):
+        query = BarQuerySerializer(data=self.request.query_params)
+        query.is_valid(raise_exception=True)
+        params = query.validated_data
+        asset = get_object_or_404(Asset, symbol=params["symbol"])
+        bars = MODELS[params["unit"]].objects.filter(asset=asset)
+        return time_range(bars, "bucket", params).order_by("bucket")
+
+
+def latest_by_asset(model, field: str) -> dict[int, datetime]:
+    """종목 id → 그 테이블에서 가장 늦은 field 값."""
+    return dict(model.objects.values_list("asset_id").annotate(latest=Max(field)).order_by())
+
+
+class MinuteStatusView(APIView):
+    """종목별 최신 상태: 마지막 분봉·마지막 시간봉·마지막 일 집계 시각(UTC)."""
+
+    @extend_schema(responses=MinuteStatusSerializer(many=True))
+    def get(self, request):
+        last_minute = latest_by_asset(MinuteCandle, "ts")
+        last_hour = latest_by_asset(HourlyBar, "bucket")
+        last_day = latest_by_asset(DailyAgg, "bucket")
+        rows = [
+            {
+                "symbol": asset.symbol,
+                "last_minute": last_minute.get(asset.id),
+                "last_hour": last_hour.get(asset.id),
+                "last_day": last_day.get(asset.id),
+            }
+            for asset in Asset.objects.all()
+        ]
+        return Response(MinuteStatusSerializer(rows, many=True).data)
 
 
 class CollectionRunListView(generics.ListAPIView):
