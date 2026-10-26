@@ -56,12 +56,14 @@ def day_matrix(start: date, end: date) -> dict:
     assets = list(Asset.objects.filter(is_active=True).order_by("symbol"))
     lo, hi = utc_bounds(start, end)
 
+    # COUNT(*): COUNT(id)는 id가 인덱스에 없어 힙을 읽는다(Bitmap Heap Scan, 버퍼 4,046).
+    # COUNT(*)면 unique(asset_id, ts)만 읽는 Index Only Scan(버퍼 1,437, 116 → 90ms, 30일 21만 행).
     minutes = {
         (r["asset_id"], r["day"]): r["n"]
         for r in MinuteCandle.objects.filter(ts__gte=lo, ts__lt=hi)
         .annotate(day=TruncDate("ts", tzinfo=UTC))
         .values("asset_id", "day")
-        .annotate(n=Count("id"))
+        .annotate(n=Count("*"))
     }
     agg_minutes = {
         (asset_id, bucket.astimezone(UTC).date()): count
