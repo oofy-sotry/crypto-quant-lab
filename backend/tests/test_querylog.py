@@ -25,6 +25,14 @@ def test_capture_queries_records_failed_query():
     assert log.count == 1
 
 
+def test_middleware_adds_server_timing_header(client):
+    response = client.get("/api/assets/")
+
+    timing = response["Server-Timing"]
+    assert timing.startswith("db;dur=")
+    assert timing.endswith('desc="1 queries"')
+
+
 def test_capture_queries_stops_after_block():
     with capture_queries() as log:
         Asset.objects.count()

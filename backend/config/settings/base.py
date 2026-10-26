@@ -31,6 +31,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # 맨 앞에 둬야 다른 미들웨어(세션·인증)가 실행한 쿼리까지 센다.
+    "config.querylog.QueryTimingMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
