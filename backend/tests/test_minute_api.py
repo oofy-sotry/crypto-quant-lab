@@ -1,3 +1,4 @@
+from base64 import b64encode
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -62,6 +63,19 @@ def test_minutes_next_cursor_continues_after_last_row_within_range(client, btc):
         url, params = body["next"], None  # next 링크에 범위·페이지 크기·커서가 들어 있다
 
     assert seen == ["00:00", "00:01", "00:02", "00:03", "00:04"]
+
+
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not-base64!",
+        b64encode(b"p=yesterday").decode(),  # 형식은 맞는데 위치 값이 시각이 아님
+    ],
+)
+def test_minutes_rejects_tampered_cursor_with_404(client, btc, cursor):
+    response = client.get(reverse("minute-list"), {"symbol": "KRW-BTC", "cursor": cursor})
+
+    assert response.status_code == 404
 
 
 def test_minutes_treats_naive_time_as_utc(client, btc):

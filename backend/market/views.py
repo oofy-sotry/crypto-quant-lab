@@ -1,10 +1,12 @@
 import hmac
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count, Max, Min, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics
+from rest_framework.exceptions import NotFound
 from rest_framework.pagination import CursorPagination, PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -108,6 +110,13 @@ class TimeSeriesPagination(CursorPagination):
     page_size = 500
     page_size_query_param = "page_size"
     max_page_size = 5000
+
+    def paginate_queryset(self, queryset, request, view=None):
+        # 커서 안 위치 값이 시각 형식이 아니면(직접 고친 커서) DRF는 500을 낸다 → 404로 바꾼다.
+        try:
+            return super().paginate_queryset(queryset, request, view)
+        except DjangoValidationError as exc:
+            raise NotFound(self.invalid_cursor_message) from exc
 
 
 class MinutePagination(TimeSeriesPagination):
