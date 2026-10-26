@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
+from django.conf import settings
 from django.db import connection, transaction
 from django.utils import timezone
 
@@ -204,6 +205,21 @@ def reprocess_daily(asset, start: date, end: date, client=None) -> Result:
     }
     changed = sum(len(keys) for keys in changes.values())
     return Result(len(existing), in_range.count(), changed, diff)
+
+
+def retention_error(target: str, start: date, today: date) -> str | None:
+    """분봉 보관 기간(MINUTE_RETENTION_DAYS) 밖 날의 분봉·집계 재처리를 막는 오류 문구(없으면 None).
+
+    그 날은 분봉이 이미 지워져 있다. 집계 재처리는 "분봉이 없는 구간"으로 보고 남아 있던 집계 봉을
+    지우고, 분봉 재처리는 다시 받은 분봉이 다음 Cron에 또 지워진다. 일봉 재처리는 상관없다.
+    """
+    keep = settings.MINUTE_RETENTION_DAYS
+    if keep <= 0 or target == ReprocessRun.Target.DAILY:
+        return None
+    oldest = today - timedelta(days=keep)  # 분봉 Cron이 이 날 0시(UTC) 전 분봉을 지운다
+    if start < oldest:
+        return f"{target} 재처리는 분봉 보관 기간({keep}일) 안, {oldest}부터만 가능합니다."
+    return None
 
 
 TARGETS = {
