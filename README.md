@@ -150,6 +150,9 @@ python manage.py reprocess --asset KRW-BTC --target minutes \
 | GET | `/api/health/` | DB·Redis 연결 상태와 소요 시간 |
 | GET | `/api/assets/` | 종목 목록 |
 | GET | `/api/candles/?symbol=KRW-BTC&from=2025-01-01&to=2025-12-31` | 일봉 (페이지당 500개, 최대 5000) |
+| GET | `/api/minutes/?symbol=KRW-BTC&from=2026-10-01T00:00Z&to=2026-10-02T00:00Z` | 분봉 (v2, UTC, `to` 미포함, keyset 페이지네이션 — `next` 링크로 이어 읽기, 페이지당 500개·최대 5000) |
+| GET | `/api/bars/?symbol=KRW-BTC&unit=hour` | 분봉으로 만든 집계 봉 (v2, `unit=hour` 시간봉·`day` 일봉, VWAP·변동성·원본 분봉 수 포함, keyset) |
+| GET | `/api/minutes/status/` | 종목별 마지막 분봉·시간봉·일 집계 시각 (v2) |
 | GET | `/api/integrity/summary/` | 종목별 데이터 범위·열린 이슈 수·마지막 수집 |
 | GET | `/api/integrity/issues/?symbol=&type=&severity=&resolved=` | 무결성 이슈 목록 |
 | GET | `/api/collection-runs/` | 수집 실행 기록 |
