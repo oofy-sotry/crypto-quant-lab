@@ -42,13 +42,26 @@ def test_minutes_filters_half_open_range_in_utc(client, btc):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["count"] == 3
+    assert "count" not in body  # keyset 페이지네이션은 전체 개수를 세지 않는다
+    assert body["next"] is None
     assert [m["ts"] for m in body["results"]] == [
         "2026-10-23T00:00:00Z",
         "2026-10-23T00:01:00Z",
         "2026-10-23T00:02:00Z",
     ]
     assert body["results"][0]["open"] == "160.00000000"  # Decimal은 문자열
+
+
+def test_minutes_next_cursor_continues_after_last_row_within_range(client, btc):
+    query = {"symbol": "KRW-BTC", "from": "2026-10-23T00:00Z", "to": "2026-10-23T00:05Z"}
+    seen = []
+    url, params = reverse("minute-list"), {**query, "page_size": 2}
+    while url:
+        body = client.get(url, params).json()
+        seen += [m["ts"][11:16] for m in body["results"]]
+        url, params = body["next"], None  # next 링크에 범위·페이지 크기·커서가 들어 있다
+
+    assert seen == ["00:00", "00:01", "00:02", "00:03", "00:04"]
 
 
 def test_minutes_treats_naive_time_as_utc(client, btc):

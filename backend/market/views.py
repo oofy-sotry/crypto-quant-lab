@@ -5,7 +5,7 @@ from django.db.models import Count, Max, Min, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics
-from rest_framework.pagination import PageNumberPagination
+from rest_framework.pagination import CursorPagination, PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -96,6 +96,28 @@ class CandleListView(generics.ListAPIView):
         return candles.order_by("date")
 
 
+class TimeSeriesPagination(CursorPagination):
+    """keyset 페이지네이션: "마지막으로 본 시각보다 뒤" 조건으로 다음 페이지를 읽는다.
+
+    페이지 번호 방식은 페이지마다 COUNT(*)(BTC 분봉 52만 행, 약 135ms)를 하고, 깊은 페이지일수록
+    OFFSET만큼 인덱스를 읽고 버린다. keyset은 COUNT가 없고 어느 페이지든 인덱스에서 바로 찾는다.
+    대신 전체 개수와 임의 페이지 이동이 없다(시계열을 앞에서부터 차례로 읽는 용도라 괜찮다).
+    정렬 컬럼은 종목 안에서 유일해야 한다(unique(asset, ts)·unique(asset, bucket)).
+    """
+
+    page_size = 500
+    page_size_query_param = "page_size"
+    max_page_size = 5000
+
+
+class MinutePagination(TimeSeriesPagination):
+    ordering = "ts"
+
+
+class BarPagination(TimeSeriesPagination):
+    ordering = "bucket"
+
+
 RANGE_PARAMETERS = [
     OpenApiParameter("symbol", str, required=True, description="예: KRW-BTC"),
     OpenApiParameter("from", str, description="시작 시각 ISO 8601 (포함, 시간대 없으면 UTC)"),
@@ -117,14 +139,14 @@ class MinuteCandleListView(generics.ListAPIView):
     """분봉 목록 (시각 오름차순, UTC)."""
 
     serializer_class = MinuteCandleSerializer
-    pagination_class = CandlePagination
+    pagination_class = MinutePagination
 
     def get_queryset(self):
         query = MinuteQuerySerializer(data=self.request.query_params)
         query.is_valid(raise_exception=True)
         asset = get_object_or_404(Asset, symbol=query.validated_data["symbol"])
         minutes = MinuteCandle.objects.filter(asset=asset)
-        return time_range(minutes, "ts", query.validated_data).order_by("ts")
+        return time_range(minutes, "ts", query.validated_data)
 
 
 @extend_schema(
@@ -137,7 +159,7 @@ class AggBarListView(generics.ListAPIView):
     """분봉으로 만든 집계 봉 목록 (구간 시작 오름차순, UTC). unit=hour 시간봉, unit=day 일봉."""
 
     serializer_class = AggBarSerializer
-    pagination_class = CandlePagination
+    pagination_class = BarPagination
 
     def get_queryset(self):
         query = BarQuerySerializer(data=self.request.query_params)
@@ -145,7 +167,7 @@ class AggBarListView(generics.ListAPIView):
         params = query.validated_data
         asset = get_object_or_404(Asset, symbol=params["symbol"])
         bars = MODELS[params["unit"]].objects.filter(asset=asset)
-        return time_range(bars, "bucket", params).order_by("bucket")
+        return time_range(bars, "bucket", params)
 
 
 def latest(model, field: str) -> Subquery:
