@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from rest_framework.test import APIRequestFactory
 
+from config.querylog import capture_queries
 from market.integrity import MIN_GAP, find_gaps_in_db
 from market.models import Asset, MinuteCandle
 from market.views import (
@@ -54,41 +55,31 @@ def gaps(days: int):
     return lambda: find_gaps_in_db(asset, end - timedelta(days=days), end, MIN_GAP)
 
 
-def scenarios() -> dict:
-    month_ago = utc(LAST_DAY - timedelta(days=29))
-    return {
-        # 1. 종목·기간 분봉 조회 (페이지네이션): 첫 페이지 / 깊은 페이지(1년 중 절반쯤)
-        "minutes_first_page": api(MinuteCandleListView, "/api/minutes/", symbol=SYMBOL),
-        "minutes_deep_page": api(
-            MinuteCandleListView, "/api/minutes/", symbol=SYMBOL, **cursor_at(DEEP_OFFSET)
-        ),
-        "minutes_month": api(
-            MinuteCandleListView, "/api/minutes/", symbol=SYMBOL, **{"from": month_ago}
-        ),
-        # 2. 기간별 시간 집계 조회
-        "bars_hour_month": api(
-            AggBarListView, "/api/bars/", symbol=SYMBOL, unit="hour", **{"from": month_ago}
-        ),
-        "bars_hour_year": api(AggBarListView, "/api/bars/", symbol=SYMBOL, unit="hour"),
-        # 3. 종목별 최신 상태 요약
-        "minute_status": api(MinuteStatusView, "/api/minutes/status/"),
-        # 4. 결측 구간 탐지 (재처리 상한 31일, 1년 전체)
-        "gaps_31d": gaps(31),
-        "gaps_year": gaps(365),
-        # 5. 미해결 이슈 목록
-        "open_issues": api(IntegrityIssueListView, "/api/integrity/issues/", resolved="false"),
-    }
+MONTH_AGO = utc(LAST_DAY - timedelta(days=29))
 
-
-class Recorder:
-    """실행되는 SQL과 파라미터를 그대로 모은다(나중에 같은 문장을 EXPLAIN하려고)."""
-
-    def __init__(self):
-        self.statements = []
-
-    def __call__(self, execute, sql, params, many, context):
-        self.statements.append((sql, params))
-        return execute(sql, params, many, context)
+# 이름 → 시나리오를 준비하는 함수. 준비(커서 계산 등)에도 쿼리가 들어서 고른 것만 준비한다.
+SCENARIOS = {
+    # 1. 종목·기간 분봉 조회 (페이지네이션): 첫 페이지 / 깊은 페이지(1년 중 절반쯤)
+    "minutes_first_page": lambda: api(MinuteCandleListView, "/api/minutes/", symbol=SYMBOL),
+    "minutes_deep_page": lambda: api(
+        MinuteCandleListView, "/api/minutes/", symbol=SYMBOL, **cursor_at(DEEP_OFFSET)
+    ),
+    "minutes_month": lambda: api(
+        MinuteCandleListView, "/api/minutes/", symbol=SYMBOL, **{"from": MONTH_AGO}
+    ),
+    # 2. 기간별 시간 집계 조회
+    "bars_hour_month": lambda: api(
+        AggBarListView, "/api/bars/", symbol=SYMBOL, unit="hour", **{"from": MONTH_AGO}
+    ),
+    "bars_hour_year": lambda: api(AggBarListView, "/api/bars/", symbol=SYMBOL, unit="hour"),
+    # 3. 종목별 최신 상태 요약
+    "minute_status": lambda: api(MinuteStatusView, "/api/minutes/status/"),
+    # 4. 결측 구간 탐지 (재처리 상한 31일, 1년 전체)
+    "gaps_31d": lambda: gaps(31),
+    "gaps_year": lambda: gaps(365),
+    # 5. 미해결 이슈 목록
+    "open_issues": lambda: api(IntegrityIssueListView, "/api/integrity/issues/", resolved="false"),
+}
 
 
 def explain(sql: str, params) -> dict:
@@ -142,18 +133,18 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         repeat = options["repeat"]
         results = {}
-        for name, run in scenarios().items():
+        for name, prepare in SCENARIOS.items():
             if options["only"] and name not in options["only"]:
                 continue
-            recorder = Recorder()
-            with connection.execute_wrapper(recorder):
+            run = prepare()
+            with capture_queries() as log:
                 run()  # 워밍업 + 실행 SQL 수집
             wall = []
             for _ in range(repeat):
                 start = time.perf_counter()
                 run()
                 wall.append((time.perf_counter() - start) * 1000)
-            statements = [measure_statement(sql, p, repeat) for sql, p in recorder.statements]
+            statements = [measure_statement(q.sql, q.params, repeat) for q in log.queries]
             results[name] = {
                 "wall_ms": round(statistics.median(wall), 2),
                 "queries": len(statements),
