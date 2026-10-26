@@ -1,7 +1,12 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
+from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
+
+from config.querylog import SLOW_QUERIES_KEY
 
 
 @pytest.mark.django_db
@@ -22,6 +27,24 @@ def test_health_returns_503_when_cache_fails(client):
 
     assert response.status_code == 503
     assert response.json()["checks"]["cache"] == "error: ConnectionError"
+    assert response.json()["queries"]["slow_24h"] is None  # 목록이 Redis에 있어 알 수 없음
+
+
+@pytest.mark.django_db
+def test_health_reports_slow_queries_of_last_24_hours(client, settings):
+    settings.SLOW_QUERY_MS = 150
+    now = timezone.now()
+    cache.set(
+        SLOW_QUERIES_KEY,
+        [
+            {"at": (now - timedelta(hours=1)).isoformat(), "path": "/a", "ms": 300, "sql": "S"},
+            {"at": (now - timedelta(hours=30)).isoformat(), "path": "/b", "ms": 300, "sql": "S"},
+        ],
+    )
+
+    body = client.get(reverse("health")).json()
+
+    assert body["queries"] == {"slow_threshold_ms": 150, "slow_24h": 1}
 
 
 @pytest.mark.django_db
