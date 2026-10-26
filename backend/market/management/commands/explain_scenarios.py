@@ -102,6 +102,10 @@ def scan_nodes(plan: dict) -> list[str]:
 
 
 def measure_statement(sql: str, params, repeat: int) -> dict:
+    # EXPLAIN ANALYZE는 문장을 실제로 실행한다. 쓰기 문장(INSERT·UPDATE·DELETE 등)이 섞이면
+    # 반복 측정이 데이터를 바꾸므로 SELECT만 잰다.
+    if not sql.lstrip().upper().startswith("SELECT"):
+        return {"sql": sql[:200], "skipped": "SELECT가 아니라 측정하지 않음"}
     explain(sql, params)  # 워밍업
     runs = [explain(sql, params) for _ in range(repeat)]
     median = statistics.median_low([r["Execution Time"] for r in runs])
@@ -152,6 +156,9 @@ class Command(BaseCommand):
             }
             self.stdout.write(f"{name}: {results[name]['wall_ms']}ms, 쿼리 {len(statements)}개")
             for s in statements:
+                if "skipped" in s:
+                    self.stdout.write(f"  (측정 안 함: {s['skipped']}) {s['sql'][:60]}")
+                    continue
                 self.stdout.write(
                     f"  {s['exec_ms']:>9.3f}ms  hit {s['shared_hit']:>6} read {s['shared_read']:>5}"
                     f"  {', '.join(s['scans']) or '-'}"

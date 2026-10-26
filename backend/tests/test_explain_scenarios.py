@@ -4,6 +4,9 @@ from io import StringIO
 import pytest
 from django.core.management import call_command
 
+from market.management.commands.explain_scenarios import measure_statement
+from market.models import Asset
+
 pytestmark = pytest.mark.django_db
 
 
@@ -32,3 +35,12 @@ def test_explain_scenarios_reports_statements_and_saves_json(tmp_path):
     assert status["queries"] == len(status["statements"]) > 0
     assert all("exec_ms" in s and "scans" in s for s in status["statements"])
     assert "minute_status:" in out.getvalue()
+
+
+def test_measure_statement_does_not_run_write_statements():
+    before = Asset.objects.count()
+
+    result = measure_statement("DELETE FROM market_asset", [], repeat=3)
+
+    assert "skipped" in result
+    assert Asset.objects.count() == before
