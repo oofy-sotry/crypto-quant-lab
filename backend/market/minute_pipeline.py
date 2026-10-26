@@ -9,12 +9,14 @@ import time
 from datetime import UTC, datetime, timedelta
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from market.aggregates import MODELS, aggregate_minutes, delete_orphan_aggregates
 from market.integrity import run_minute_checks
 from market.minutes import collect_minutes
 from market.models import Asset, CollectionRun, MinuteCandle
+from market.reprocess import Rejected, lock_days
 from market.upbit import UpbitClient
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,7 @@ def run_minute_pipeline(
     now = now or timezone.now()
     end = utc_midnight(now)  # 오늘 0시(UTC) 전까지 = 끝난 날만
     start = end - timedelta(days=days)
+    last_day = (end - timedelta(days=1)).date()
     assets = list(Asset.objects.filter(is_active=True))
     run = CollectionRun.objects.create(
         kind=CollectionRun.Kind.MINUTES, trigger=trigger, assets_count=len(assets)
@@ -68,10 +71,19 @@ def run_minute_pipeline(
     started = time.monotonic()
     for asset in assets:
         try:
-            run.upserted_count += collect_minutes(asset, since=start, to=end, client=client)
-            for unit in MODELS:
-                aggregate_minutes(asset, unit, start, end)
-                delete_orphan_aggregates(asset, unit, start, end)
+            # 재처리와 같은 (종목, 날짜) 락을 잡아 같은 날을 동시에 쓰지 않는다. 락이 트랜잭션
+            # 단위라 종목 하나(최근 2일, 약 2,900행)를 묶는다. 실패하면 그 종목만 롤백된다.
+            with transaction.atomic():
+                if not lock_days(asset, start.date(), last_day):
+                    raise Rejected
+                saved = collect_minutes(asset, since=start, to=end, client=client)
+                for unit in MODELS:
+                    aggregate_minutes(asset, unit, start, end)
+                    delete_orphan_aggregates(asset, unit, start, end)
+            run.upserted_count += saved
+        except Rejected:
+            # 재처리가 끝나면 그 날은 이미 원본 기준으로 맞춰져 있고, 다음 날 Cron도 다시 본다.
+            errors.append(f"{asset.symbol}: 같은 날짜의 재처리가 실행 중이라 건너뜀")
         except Exception as exc:  # 한 종목 실패가 다른 종목을 멈추지 않게 한다
             logger.exception("%s 분봉 처리 실패", asset.symbol)
             errors.append(f"{asset.symbol}: {exc.__class__.__name__}: {exc}")
@@ -81,7 +93,7 @@ def run_minute_pipeline(
     deleted = 0
     started = time.monotonic()
     try:
-        checks = run_minute_checks(start.date(), (end - timedelta(days=1)).date(), run=run)
+        checks = run_minute_checks(start.date(), last_day, run=run)
     except Exception as exc:
         logger.exception("분봉 검사 실패")
         errors.append(f"checks: {exc.__class__.__name__}: {exc}")
@@ -103,7 +115,7 @@ def run_minute_pipeline(
         run.status = CollectionRun.Status.FAILED
     run.error_message = "\n".join(errors)
     run.detail = {
-        "range": [start.date().isoformat(), (end - timedelta(days=1)).date().isoformat()],
+        "range": [start.date().isoformat(), last_day.isoformat()],
         "timings": timings,
         "deleted_minutes": deleted,
         "keep_days": keep_days,

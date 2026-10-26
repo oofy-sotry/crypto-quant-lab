@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -90,3 +90,20 @@ def test_delete_expired_minutes_keeps_aggregates_and_recent_days():
     assert delete_expired_minutes(NOW, keep_days=30) == 1
     assert sorted(MinuteCandle.objects.values_list("ts", flat=True))[0] == cutoff
     assert delete_expired_minutes(NOW, keep_days=0) == 0  # 0이면 지우지 않음
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pipeline_skips_asset_whose_days_are_being_reprocessed(hold_lock):
+    # transaction=True 테스트는 앞선 테스트가 시드 종목을 지웠을 수 있어 직접 만든다.
+    btc, _ = Asset.objects.get_or_create(symbol="KRW-BTC", defaults={"name": "비트코인"})
+    Asset.objects.get_or_create(symbol="KRW-ETH", defaults={"name": "이더리움"})
+    finish = hold_lock(btc, date(2026, 10, 25), date(2026, 10, 25))  # 이틀 중 하루라도 겹침
+    try:
+        run = run_minute_pipeline("cron", client=FakeClient(two_days()), now=NOW, keep_days=0)
+    finally:
+        finish()
+
+    assert run.status == CollectionRun.Status.PARTIAL
+    assert "KRW-BTC: 같은 날짜의 재처리가 실행 중이라 건너뜀" in run.error_message
+    assert not MinuteCandle.objects.filter(asset=btc).exists()
+    assert MinuteCandle.objects.filter(asset__symbol="KRW-ETH").count() == 2 * 1440
