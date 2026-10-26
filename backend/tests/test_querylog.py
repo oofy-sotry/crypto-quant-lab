@@ -1,7 +1,16 @@
+from unittest.mock import patch
+
 import pytest
 from django.db import connection
 
-from config.querylog import capture_queries
+from config.querylog import (
+    SLOW_QUERIES_KEEP,
+    Query,
+    QueryLog,
+    capture_queries,
+    recent_slow_queries,
+    record_slow_queries,
+)
 from market.models import Asset
 
 pytestmark = pytest.mark.django_db
@@ -50,3 +59,33 @@ def test_capture_queries_stops_after_block():
     Asset.objects.count()
 
     assert log.count == 1
+
+
+def slow_log(*seconds, sql="SELECT 1"):
+    return QueryLog([Query(sql, ("비밀값",), s) for s in seconds])
+
+
+def test_record_slow_queries_keeps_newest_first_without_params(settings):
+    settings.SLOW_QUERY_MS = 200
+    record_slow_queries("/api/a/", slow_log(0.05, 0.3, sql="SELECT old"))
+    added = record_slow_queries("/api/b/", slow_log(0.25))
+
+    entries = recent_slow_queries()
+    assert added == 1
+    assert [(e["path"], e["ms"]) for e in entries] == [("/api/b/", 250.0), ("/api/a/", 300.0)]
+    assert "비밀값" not in str(entries)  # 파라미터 값은 남기지 않음
+
+
+def test_record_slow_queries_skips_cron_and_caps_list(settings):
+    settings.SLOW_QUERY_MS = 1
+    assert record_slow_queries("/api/cron/minutes/", slow_log(5)) == 0
+
+    record_slow_queries("/api/a/", slow_log(*[0.01] * 60))
+
+    assert len(recent_slow_queries()) == SLOW_QUERIES_KEEP
+
+
+def test_record_slow_queries_survives_cache_failure(settings):
+    settings.SLOW_QUERY_MS = 1
+    with patch("config.querylog.cache.get", side_effect=ConnectionError("redis down")):
+        assert record_slow_queries("/api/a/", slow_log(0.5)) == 1  # 요청은 실패하지 않음
