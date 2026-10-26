@@ -312,11 +312,6 @@ class IntegritySummaryView(APIView):
 OPS_MAX_DAYS = 90
 
 
-@extend_schema(
-    operation_id="ops_days_matrix",
-    parameters=[OpenApiParameter("days", int, description="최근 며칠(기본 30, 최대 90)")],
-    responses=DayMatrixSerializer,
-)
 class OpsDayMatrixView(APIView):
     """운영 콘솔: 활성 종목 × 최근 N일(마감된 UTC 날) 상태 표.
 
@@ -324,6 +319,11 @@ class OpsDayMatrixView(APIView):
     > warning > ok 순으로 가장 심한 것 하나.
     """
 
+    @extend_schema(
+        operation_id="ops_days_matrix",
+        parameters=[OpenApiParameter("days", int, description="최근 며칠(기본 30, 최대 90)")],
+        responses=DayMatrixSerializer,
+    )
     def get(self, request):
         try:
             days = int(request.query_params.get("days", 30))
