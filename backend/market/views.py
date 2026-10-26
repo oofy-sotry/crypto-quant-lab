@@ -220,11 +220,22 @@ class MinuteStatusView(APIView):
         return Response(MinuteStatusSerializer(assets, many=True).data)
 
 
+@extend_schema(
+    parameters=[
+        OpenApiParameter("kind", str, enum=CollectionRun.Kind.values, description="없으면 전부"),
+    ]
+)
 class CollectionRunListView(generics.ListAPIView):
-    """수집 실행 기록 (최신순)."""
+    """수집 실행 기록 (최신순). kind=daily 일봉 수집, kind=minutes 분봉 파이프라인."""
 
-    queryset = CollectionRun.objects.all()
     serializer_class = CollectionRunSerializer
+
+    def get_queryset(self):
+        runs = CollectionRun.objects.all()
+        kind = self.request.query_params.get("kind")
+        if kind in CollectionRun.Kind.values:
+            runs = runs.filter(kind=kind)
+        return runs
 
 
 @extend_schema(

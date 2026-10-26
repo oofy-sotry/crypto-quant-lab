@@ -106,3 +106,19 @@ def test_integrity_summary_counts_open_issues_per_asset(client, btc):
     assert (summary["open_errors"], summary["open_warnings"]) == (1, 1)
     assert summary["last_final_date"] == "2026-01-09"
     assert body["last_run"]["trigger"] == "cron"
+
+
+@pytest.mark.django_db
+def test_collection_runs_filter_by_kind_and_include_detail(client):
+    CollectionRun.objects.create(trigger="cron")
+    CollectionRun.objects.create(
+        kind=CollectionRun.Kind.MINUTES, trigger="cron", detail={"deleted_minutes": 7200}
+    )
+
+    everything = client.get(reverse("collection-run-list")).json()["results"]
+    minutes = client.get(reverse("collection-run-list"), {"kind": "minutes"}).json()["results"]
+    daily = client.get(reverse("collection-run-list"), {"kind": "daily"}).json()["results"]
+
+    assert len(everything) == 2
+    assert [(r["kind"], r["detail"]) for r in minutes] == [("minutes", {"deleted_minutes": 7200})]
+    assert [r["kind"] for r in daily] == ["daily"]  # 기존 기록은 daily
